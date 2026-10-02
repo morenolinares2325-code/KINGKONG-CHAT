@@ -247,11 +247,12 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 with st.chat_message("assistant", avatar="🦍"):
             historial = [
-                {"role": "system", "content": "Eres KingKong, un asistente conciso, ágil, directo y servicial con estilo selvático."}
+                {"role": "system", "content": "Eres KingKong, un asistente inteligente, directo y conciso con temática tecnológica de selva."}
             ]
             for m in st.session_state.messages:
                 historial.append({"role": m["role"], "content": m["content"]})
 
+            full_response = ""
             try:
                 modelos_groq = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
                 stream = None
@@ -307,7 +308,6 @@ elif menu == "👥 Sala de Conversación":
                 else:
                     st.markdown(f"📎 Archivo adjunto: {msg['file_name']}")
 
-    # Formulario de envío limpio y robusto para evitar colisiones
     with st.form("form_sala", clear_on_submit=True):
         col_u, col_t = st.columns([1, 3])
         with col_u:
