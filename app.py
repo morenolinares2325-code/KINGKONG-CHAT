@@ -480,3 +480,4 @@ else:
             st.session_state.room_messages = []
             st.success("Historial de la sala eliminado.")
             st.rerun()
+
