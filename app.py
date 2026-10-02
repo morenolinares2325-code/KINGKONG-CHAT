@@ -102,7 +102,7 @@ if API_KEY:
             st.session_state.available_models = real_models
             
             # Preferencia a modelos rápidos modernos
-            preferidos = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
+            preferidos = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"]
             for pref in preferidos:
                 if pref in real_models:
                     st.session_state.active_model_name = pref
