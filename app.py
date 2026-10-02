@@ -72,7 +72,7 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# ESTILOS CSS
+# ESTILOS CSS (JUNGLE CONSOLE EDITION)
 # =================================================
 
 bg_css = get_background_css()
@@ -221,7 +221,7 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT PRINCIPAL
+# PANTALLA: CHAT PRINCIPAL (ROBUSTO CONTRA ERROR 400)
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -247,8 +247,8 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            # Saneamiento estricto del historial (elimina mensajes vacíos o errores)
-            historial = []
+            # Historial estrictamente saneado sin fallos ni vacíos
+            historial = [{"role": "system", "content": "Eres KingKong, un asistente directo, rápido y servicial en una atmósfera de selva tecnológica."}]
             for m in st.session_state.messages:
                 txt = (m.get("content") or "").strip()
                 if txt and not txt.startswith("⚠️"):
@@ -256,30 +256,33 @@ if menu == "💬 KingKong Chat":
 
             full_response = ""
             stream = None
-            error_msg = None
+            error_detalles = None
 
-            # 1. Obtener lista dinámica de modelos disponibles en tu cuenta Groq
-            candidatos = []
-            try:
-                models_data = client.models.list()
-                for mod in models_data.data:
-                    candidatos.append(mod.id)
-            except Exception:
-                pass
-
-            # Modelos de respaldo estándar si la llamada de lista falla
-            respaldos = [
+            # Prioridad de modelos de chat activos en Groq (excluyendo whisper y guard)
+            modelos_ordenados = [
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b",
                 "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
-                "mixtral-8x7b-32768",
-                "gemma2-9b-it"
+                "qwen/qwen3.8-27b",
+                "qwen/qwen3.6-27b",
+                "llama3-70b-8192"
             ]
-            for r in respaldos:
-                if r not in candidatos:
-                    candidatos.append(r)
 
-            # 2. Ejecución con streaming seguro
-            for m_id in candidatos:
+            # Intentar obtener los modelos autorizados por tu key
+            try:
+                lista_api = [m.id for m in client.models.list().data if not any(x in m.id for x in ["whisper", "guard", "orpheus"])]
+                # Poner al principio de la lista los que la API confirme que existen
+                candidatos = [m for m in modelos_ordenados if m in lista_api] + [m for m in lista_api if m not in modelos_ordenados] + modelos_ordenados
+            except Exception:
+                candidatos = modelos_ordenados
+
+            # Eliminar duplicados manteniendo orden
+            candidatos_unicos = []
+            for c in candidatos:
+                if c not in candidatos_unicos:
+                    candidatos_unicos.append(c)
+
+            for m_id in candidatos_unicos:
                 try:
                     stream = client.chat.completions.create(
                         model=m_id,
@@ -288,7 +291,7 @@ if menu == "💬 KingKong Chat":
                     )
                     break
                 except Exception as e:
-                    error_msg = str(e)
+                    error_detalles = e
                     continue
 
             if stream is not None:
@@ -301,7 +304,7 @@ if menu == "💬 KingKong Chat":
 
                 full_response = st.write_stream(stream_text())
             else:
-                full_response = f"⚠️ Error en Groq: {error_msg}"
+                full_response = f"⚠️ Error en Groq: {error_detalles}"
                 st.error(full_response)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
