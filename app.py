@@ -4,125 +4,79 @@ from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime
 import os
+import base64
 
-# ===================================
-# TEMAS
-# ===================================
+# ======================
+# FUNCIONES
+# ======================
 
-THEMES = {
+def image_to_base64(path):
 
-    "🦍 Jungle Neon": {
-        "primary":"#39FF14",
-        "secondary":"#00C853",
-        "background":"#050505",
-        "sidebar":"#111111",
-        "card":"#161616",
-        "text":"#FFFFFF"
-    },
+    with open(path, "rb") as f:
 
-    "💚 Matrix": {
-        "primary":"#00FF00",
-        "secondary":"#00CC00",
-        "background":"#000000",
-        "sidebar":"#050505",
-        "card":"#111111",
-        "text":"#FFFFFF"
-    },
+        return base64.b64encode(
+            f.read()
+        ).decode()
 
-    "💙 Cyber Ocean": {
-        "primary":"#00E5FF",
-        "secondary":"#0099FF",
-        "background":"#06131B",
-        "sidebar":"#0D1F2D",
-        "card":"#11293B",
-        "text":"#FFFFFF"
-    },
 
-    "🟣 Ultra Violet": {
-        "primary":"#C77DFF",
-        "secondary":"#9D4EDD",
-        "background":"#10002B",
-        "sidebar":"#240046",
-        "card":"#3C096C",
-        "text":"#FFFFFF"
-    },
-
-    "❤️ Lava Red": {
-        "primary":"#FF3D3D",
-        "secondary":"#FF6B6B",
-        "background":"#120000",
-        "sidebar":"#1E0000",
-        "card":"#2D0B0B",
-        "text":"#FFFFFF"
-    },
-
-    "🟡 Gold Monkey": {
-        "primary":"#FFD700",
-        "secondary":"#FFB300",
-        "background":"#050505",
-        "sidebar":"#111111",
-        "card":"#161616",
-        "text":"#FFFFFF"
-    }
-}
-
-# ===================================
-# ESTADOS
-# ===================================
-
-if "theme" not in st.session_state:
-    st.session_state.theme="🦍 Jungle Neon"
-
-if "messages" not in st.session_state:
-    st.session_state.messages=[]
-
-if "chat_width" not in st.session_state:
-    st.session_state.chat_width=1400
-
-if "font_size" not in st.session_state:
-    st.session_state.font_size=16
-
-if "radius" not in st.session_state:
-    st.session_state.radius=15
-
-if "sidebar_width" not in st.session_state:
-    st.session_state.sidebar_width=300
-
-theme = THEMES[st.session_state.theme]
-
-PRIMARY=theme["primary"]
-SECONDARY=theme["secondary"]
-BACKGROUND=theme["background"]
-SIDEBAR=theme["sidebar"]
-CARD=theme["card"]
-TEXT=theme["text"]
-
-# ===================================
-# GEMINI
-# ===================================
+# ======================
+# CONFIG
+# ======================
 
 load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
-connected=False
+connected = False
 
 try:
 
-    genai.configure(api_key=API_KEY)
+    genai.configure(
+        api_key=API_KEY
+    )
 
     model = genai.GenerativeModel(
         "gemini-1.5-flash"
     )
 
-    connected=True
+    connected = True
 
 except:
-    connected=False
 
-# ===================================
-# STREAMLIT
-# ===================================
+    connected = False
+
+# ======================
+# ESTADOS
+# ======================
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "theme_color" not in st.session_state:
+    st.session_state.theme_color = "#39FF14"
+
+if "secondary_color" not in st.session_state:
+    st.session_state.secondary_color = "#00C853"
+
+if "text_color" not in st.session_state:
+    st.session_state.text_color = "#FFFFFF"
+
+if "input_color" not in st.session_state:
+    st.session_state.input_color = "#FFFFFF"
+
+if "sidebar_color" not in st.session_state:
+    st.session_state.sidebar_color = "#061208"
+
+if "font_size" not in st.session_state:
+    st.session_state.font_size = 16
+
+if "chat_width" not in st.session_state:
+    st.session_state.chat_width = 1400
+
+if "radius" not in st.session_state:
+    st.session_state.radius = 20
+
+Path("uploads").mkdir(exist_ok=True)
 
 st.set_page_config(
     page_title="KINGKONG CHAT",
@@ -130,81 +84,161 @@ st.set_page_config(
     layout="wide"
 )
 
-Path("uploads").mkdir(exist_ok=True)
-# ===================================
+bg_image = image_to_base64(
+    "assets/jungle.jpg"
+)
+# ======================
 # CSS
-# ===================================
+# ======================
 
-st.markdown(f"""
+st.markdown(
+f"""
 <style>
 
-.stApp{{
-background:{BACKGROUND};
-color:{TEXT};
+.stApp {{
+
+background-image:
+
+linear-gradient(
+rgba(0,0,0,.72),
+rgba(0,0,0,.82)
+),
+
+url("data:image/jpeg;base64,{bg_image}");
+
+background-size:cover;
+
+background-position:center;
+
+background-attachment:fixed;
 }}
 
-section[data-testid="stSidebar"]{{
-background:{SIDEBAR};
-border-right:2px solid {PRIMARY};
+section[data-testid="stSidebar"] {{
+
+background:
+linear-gradient(
+180deg,
+rgba(5,15,8,.95),
+rgba(8,25,10,.95),
+rgba(5,15,8,.95)
+);
+
+border-right:
+2px solid {st.session_state.theme_color};
+
+backdrop-filter:
+blur(12px);
 }}
 
-.block-container{{
-max-width:{st.session_state.chat_width}px;
+[data-testid="stChatMessage"] {{
+
+background:
+rgba(15,15,15,.55);
+
+backdrop-filter:
+blur(10px);
+
+border:
+1px solid rgba(255,255,255,.15);
+
+border-radius:
+{st.session_state.radius}px;
 }}
 
-h1,h2,h3{{
-color:{PRIMARY};
+h1,h2,h3 {{
+
+color:{st.session_state.theme_color};
+
 text-shadow:
-0 0 10px {PRIMARY},
-0 0 25px {PRIMARY};
+
+0 0 15px {st.session_state.theme_color},
+
+0 0 35px {st.session_state.theme_color};
+
 }}
 
-[data-testid="stChatMessage"]{{
-background:{CARD};
-border:1px solid {SECONDARY};
-border-radius:{st.session_state.radius}px;
+.stChatInput input {{
+
+background:
+{st.session_state.input_color}
+!important;
+
+color:
+black
+!important;
+
+border:
+3px solid
+{st.session_state.theme_color}
+!important;
+
+border-radius:
+25px !important;
+
+font-size:
+{st.session_state.font_size}px
+!important;
 }}
 
-.stChatInput input{{
-background:#101010 !important;
-color:white !important;
-border:2px solid {PRIMARY} !important;
-border-radius:{st.session_state.radius}px !important;
+.stButton button {{
+
+background:
+linear-gradient(
+135deg,
+{st.session_state.theme_color},
+{st.session_state.secondary_color}
+);
+
+color:black;
+
+font-weight:bold;
+
+border:none;
+}}
+
+footer {{
+visibility:hidden;
 }}
 
 </style>
-""", unsafe_allow_html=True)
+""",
+unsafe_allow_html=True
+)
 
-# ===================================
+# ======================
 # SIDEBAR
-# ===================================
+# ======================
 
 with st.sidebar:
 
-    st.markdown(f"""
-    <h1 style="
+    st.markdown(
+    f"""
+    <h1 style='
     text-align:center;
-    color:{PRIMARY};
-    text-shadow:
-    0 0 15px {PRIMARY},
-    0 0 30px {PRIMARY};
-    ">
+    font-size:70px;
+    color:{st.session_state.theme_color};
+    '>
     🦍
     </h1>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+    )
 
-    st.markdown(f"""
-    <h2 style="
+    st.markdown(
+    f"""
+    <h2 style='
     text-align:center;
-    color:{PRIMARY};
-    ">
+    color:{st.session_state.theme_color};
+    '>
     KINGKONG CHAT
     </h2>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+    )
 
     st.markdown("---")
 
-    menu=st.radio(
+    menu = st.radio(
         "",
         [
             "💬 Chat",
@@ -216,176 +250,174 @@ with st.sidebar:
     st.markdown("---")
 
     if connected:
-        st.success("🟢 IA CONECTADA")
-    else:
-        st.error("🔴 IA DESCONECTADA")
 
-    reloj=datetime.now().strftime("%H:%M:%S")
+        st.success(
+            "🟢 IA CONECTADA"
+        )
+
+    else:
+
+        st.error(
+            "🔴 IA DESCONECTADA"
+        )
+
+    reloj = datetime.now().strftime(
+        "%H:%M:%S"
+    )
 
     st.markdown(
         f"""
         <h2 style="
         text-align:center;
-        color:{PRIMARY};
+        color:
+        {st.session_state.theme_color};
         ">
         {reloj}
         </h2>
         """,
         unsafe_allow_html=True
     )
-    # ===================================
-# CHAT
-# ===================================
+    if menu == "💬 Chat":
 
-if menu=="💬 Chat":
-
-    st.markdown(f"""
-    <h1 style="
-    text-align:center;
-    font-size:60px;
-    color:{PRIMARY};
-    ">
-    🦍 KINGKONG CHAT
-    </h1>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <h1 style="
+        text-align:center;
+        font-size:70px;
+        color:
+        {st.session_state.theme_color};
+        ">
+        🦍 KINGKONG CHAT
+        </h1>
+        """,
+        unsafe_allow_html=True
+    )
 
     for msg in st.session_state.messages:
 
         with st.chat_message(
             msg["role"]
         ):
+
             st.markdown(
                 msg["content"]
             )
 
-    prompt=st.chat_input(
+    prompt = st.chat_input(
         "Pregunta lo que quieras..."
     )
 
     if prompt:
 
         st.session_state.messages.append(
-            {
-                "role":"user",
-                "content":prompt
-            }
-        )
+        {
+            "role":"user",
+            "content":prompt
+        })
 
         try:
 
-            response=model.generate_content(
+            response = model.generate_content(
                 prompt
             )
 
-            answer=response.text
+            answer = response.text
 
         except Exception as e:
 
-            answer=f"Error: {e}"
+            answer = str(e)
 
         st.session_state.messages.append(
-            {
-                "role":"assistant",
-                "content":answer
-            }
-        )
+        {
+            "role":"assistant",
+            "content":answer
+        })
 
         st.rerun()
 
-# ===================================
-# ARCHIVOS
-# ===================================
 
-elif menu=="📁 Archivos":
+elif menu == "📁 Archivos":
 
     st.title("📁 Archivos")
 
-    file=st.file_uploader(
+    uploaded = st.file_uploader(
         "Subir archivo"
     )
 
-    if file:
+    if uploaded:
 
         with open(
             Path("uploads")
-            / file.name,
+            / uploaded.name,
             "wb"
         ) as f:
 
             f.write(
-                file.getbuffer()
+                uploaded.getbuffer()
             )
 
-    for archivo in Path(
-        "uploads"
-    ).glob("*"):
-
-        st.write(
-            f"📄 {archivo.name}"
+        st.success(
+            uploaded.name
         )
-
-# ===================================
-# AJUSTES
-# ===================================
 
 else:
 
     st.title("⚙️ Ajustes")
 
-    st.subheader("🎨 Temas")
+    st.subheader("🎨 Colores")
 
-    st.session_state.theme = st.selectbox(
-        "Tema",
-        list(THEMES.keys()),
-        index=list(THEMES.keys()).index(
-            st.session_state.theme
-        )
+    st.session_state.theme_color = st.color_picker(
+        "Color Principal",
+        st.session_state.theme_color
     )
 
-    st.subheader("📏 Tamaño Chat")
+    st.session_state.secondary_color = st.color_picker(
+        "Color Secundario",
+        st.session_state.secondary_color
+    )
+
+    st.session_state.text_color = st.color_picker(
+        "Color Texto",
+        st.session_state.text_color
+    )
+
+    st.session_state.input_color = st.color_picker(
+        "Color Input",
+        st.session_state.input_color
+    )
+
+    st.markdown("---")
+
+    st.subheader("📏 Diseño")
 
     st.session_state.chat_width = st.slider(
-        "Ancho",
+        "Ancho Chat",
         800,
         1900,
         st.session_state.chat_width
     )
 
-    st.subheader("🔤 Texto")
-
     st.session_state.font_size = st.slider(
-        "Tamaño",
+        "Texto",
         12,
-        26,
+        28,
         st.session_state.font_size
     )
 
-    st.subheader("🔲 Bordes")
-
     st.session_state.radius = st.slider(
-        "Radio",
+        "Radio Bordes",
         0,
         40,
         st.session_state.radius
     )
 
-    st.subheader("🎭 Diseño")
+    st.markdown("---")
 
-    st.selectbox(
-        "Modo",
-        [
-            "Telegram",
-            "Discord",
-            "ChatGPT",
-            "KINGKONG"
-        ]
-    )
+    if st.button(
+        "🗑️ Borrar historial"
+    ):
 
-    st.success(
-        "Los cambios se aplican al cambiar de página o recargar."
-    )
+        st.session_state.messages = []
 
-    if st.button("🗑️ Borrar historial"):
-        st.session_state.messages=[]
         st.rerun()
         
