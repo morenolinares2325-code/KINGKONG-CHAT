@@ -4,17 +4,29 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
+# --------------------------------------------------
+# CONFIG
+# --------------------------------------------------
+
 load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=API_KEY)
 
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel(
+    "gemini-1.5-flash"
+)
 
-# Carpetas
+# --------------------------------------------------
+# CARPETAS
+# --------------------------------------------------
+
 Path("uploads").mkdir(exist_ok=True)
-Path("chats").mkdir(exist_ok=True)
+
+# --------------------------------------------------
+# TEMA KINGKONG
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="KINGKONG CHAT",
@@ -22,84 +34,193 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown("""
+<style>
+
+/* Fondo principal */
+.stApp{
+    background-color:#0d1117;
+    color:#f5f5f5;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"]{
+    background-color:#111111;
+}
+
+/* Títulos */
+h1,h2,h3{
+    color:#39ff14;
+}
+
+/* Inputs */
+.stChatInput input{
+    background-color:#1b1b1b !important;
+    color:white !important;
+}
+
+/* Botones */
+.stButton button{
+    background-color:#39ff14;
+    color:black;
+    border:none;
+    font-weight:bold;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"]{
+    background-color:#1b1b1b;
+    border-radius:12px;
+    padding:10px;
+}
+
+/* Mensajes */
+[data-testid="stChatMessage"]{
+    background-color:#161b22;
+    border-radius:12px;
+    padding:10px;
+    margin-bottom:10px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# --------------------------------------------------
+# ESTADO CHAT
+# --------------------------------------------------
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Sidebar estilo Telegram
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
 
 with st.sidebar:
 
-    st.title("🦍 KINGKONG CHAT")
+    st.markdown(
+        "## 🦍 KINGKONG CHAT"
+    )
 
     st.markdown("---")
 
-    chat_name = st.radio(
-        "Chats",
+    section = st.radio(
+        "",
         [
-            "💻 Programación",
-            "📈 Bolsa",
-            "📁 Documentos",
-            "🧠 Personal"
-        ],
-        label_visibility="collapsed"
+            "📁 Archivos",
+            "🤖 IA",
+            "⚙️ Sistema"
+        ]
     )
 
-st.title(chat_name)
+    st.markdown("---")
 
-# Archivos
+    st.success("🟢 Gemini Online")
 
-uploaded_file = st.file_uploader(
-    "Subir archivo",
-    type=None
-)
+# --------------------------------------------------
+# ARCHIVOS
+# --------------------------------------------------
 
-if uploaded_file:
+if section == "📁 Archivos":
 
-    save_path = Path("uploads") / uploaded_file.name
+    st.title("📁 Archivos")
 
-    with open(save_path, "wb") as f:
-        f.write(uploaded_file.read())
-
-    st.success(
-        f"Archivo guardado: {uploaded_file.name}"
+    uploaded_file = st.file_uploader(
+        "Subir archivo"
     )
 
-# Historial
+    if uploaded_file:
 
-for msg in st.session_state.messages:
+        save_path = (
+            Path("uploads")
+            / uploaded_file.name
+        )
 
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        with open(save_path, "wb") as f:
+            f.write(uploaded_file.read())
 
-# Chat
+        st.success(
+            f"Archivo guardado: {uploaded_file.name}"
+        )
 
-prompt = st.chat_input(
-    "Escribe un mensaje..."
-)
+    st.subheader("Archivos disponibles")
 
-if prompt:
+    files = list(Path("uploads").glob("*"))
 
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": prompt
-        }
+    if not files:
+        st.info("No hay archivos")
+
+    for file in files:
+        st.write(f"📄 {file.name}")
+
+# --------------------------------------------------
+# IA
+# --------------------------------------------------
+
+elif section == "🤖 IA":
+
+    st.title("🤖 KINGKONG CHAT")
+
+    for msg in st.session_state.messages:
+
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    prompt = st.chat_input(
+        "Pregunta a Gemini..."
     )
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    if prompt:
 
-    with st.chat_message("assistant"):
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": prompt
+            }
+        )
 
-        response = model.generate_content(prompt)
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-        reply = response.text
+        with st.chat_message("assistant"):
 
-        st.markdown(reply)
+            try:
 
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": reply
-        }
+                response = model.generate_content(
+                    prompt
+                )
+
+                reply = response.text
+
+            except Exception as e:
+
+                reply = f"Error: {e}"
+
+            st.markdown(reply)
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": reply
+            }
+        )
+
+# --------------------------------------------------
+# SISTEMA
+# --------------------------------------------------
+
+else:
+
+    st.title("⚙️ Sistema")
+
+    st.info(
+        "Preparado para futuras configuraciones."
+    )
+
+    st.write(
+        "• Cambiar IA\n"
+        "• Conectar Qwen\n"
+        "• Exportar historial\n"
+        "• Importar backup\n"
+        "• Configuración usuario"
     )
