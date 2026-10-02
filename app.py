@@ -6,22 +6,19 @@ from datetime import datetime
 import os
 import base64
 
-# ======================
+# =================================================
 # FUNCIONES
-# ======================
+# =================================================
 
 def image_to_base64(path):
-
     with open(path, "rb") as f:
-
         return base64.b64encode(
             f.read()
         ).decode()
 
-
-# ======================
+# =================================================
 # CONFIG
-# ======================
+# =================================================
 
 load_dotenv()
 
@@ -45,9 +42,9 @@ except:
 
     connected = False
 
-# ======================
+# =================================================
 # ESTADOS
-# ======================
+# =================================================
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -64,17 +61,14 @@ if "text_color" not in st.session_state:
 if "input_color" not in st.session_state:
     st.session_state.input_color = "#FFFFFF"
 
-if "sidebar_color" not in st.session_state:
-    st.session_state.sidebar_color = "#061208"
-
 if "font_size" not in st.session_state:
     st.session_state.font_size = 16
 
-if "chat_width" not in st.session_state:
-    st.session_state.chat_width = 1400
-
 if "radius" not in st.session_state:
     st.session_state.radius = 20
+
+if "chat_width" not in st.session_state:
+    st.session_state.chat_width = 1400
 
 Path("uploads").mkdir(exist_ok=True)
 
@@ -87,10 +81,6 @@ st.set_page_config(
 bg_image = image_to_base64(
     "assets/jungle.jpg"
 )
-# ======================
-# CSS
-# ======================
-
 st.markdown(
 f"""
 <style>
@@ -98,19 +88,16 @@ f"""
 .stApp {{
 
 background-image:
-
 linear-gradient(
-rgba(0,0,0,.72),
-rgba(0,0,0,.82)
+rgba(0,0,0,.75),
+rgba(0,0,0,.85)
 ),
-
 url("data:image/jpeg;base64,{bg_image}");
 
 background-size:cover;
-
 background-position:center;
-
 background-attachment:fixed;
+
 }}
 
 section[data-testid="stSidebar"] {{
@@ -118,16 +105,14 @@ section[data-testid="stSidebar"] {{
 background:
 linear-gradient(
 180deg,
-rgba(5,15,8,.95),
-rgba(8,25,10,.95),
-rgba(5,15,8,.95)
+rgba(5,20,8,.95),
+rgba(10,35,15,.95),
+rgba(5,20,8,.95)
 );
 
 border-right:
 2px solid {st.session_state.theme_color};
 
-backdrop-filter:
-blur(12px);
 }}
 
 [data-testid="stChatMessage"] {{
@@ -139,21 +124,10 @@ backdrop-filter:
 blur(10px);
 
 border:
-1px solid rgba(255,255,255,.15);
+1px solid rgba(255,255,255,.08);
 
 border-radius:
 {st.session_state.radius}px;
-}}
-
-h1,h2,h3 {{
-
-color:{st.session_state.theme_color};
-
-text-shadow:
-
-0 0 15px {st.session_state.theme_color},
-
-0 0 35px {st.session_state.theme_color};
 
 }}
 
@@ -163,8 +137,10 @@ background:
 {st.session_state.input_color}
 !important;
 
-color:
-black
+color:black !important;
+
+font-size:
+{st.session_state.font_size}px
 !important;
 
 border:
@@ -175,25 +151,18 @@ border:
 border-radius:
 25px !important;
 
-font-size:
-{st.session_state.font_size}px
-!important;
 }}
 
-.stButton button {{
+h1,h2,h3 {{
 
-background:
-linear-gradient(
-135deg,
-{st.session_state.theme_color},
-{st.session_state.secondary_color}
-);
+color:
+{st.session_state.theme_color};
 
-color:black;
+text-shadow:
 
-font-weight:bold;
+0 0 10px {st.session_state.theme_color},
+0 0 25px {st.session_state.theme_color};
 
-border:none;
 }}
 
 footer {{
@@ -205,35 +174,31 @@ visibility:hidden;
 unsafe_allow_html=True
 )
 
-# ======================
-# SIDEBAR
-# ======================
-
 with st.sidebar:
 
     st.markdown(
-    f"""
-    <h1 style='
-    text-align:center;
-    font-size:70px;
-    color:{st.session_state.theme_color};
-    '>
-    🦍
-    </h1>
-    """,
-    unsafe_allow_html=True
+        f"""
+        <h1 style="
+        text-align:center;
+        font-size:70px;
+        color:{st.session_state.theme_color};
+        ">
+        🦍
+        </h1>
+        """,
+        unsafe_allow_html=True
     )
 
     st.markdown(
-    f"""
-    <h2 style='
-    text-align:center;
-    color:{st.session_state.theme_color};
-    '>
-    KINGKONG CHAT
-    </h2>
-    """,
-    unsafe_allow_html=True
+        f"""
+        <h2 style="
+        text-align:center;
+        color:{st.session_state.theme_color};
+        ">
+        KINGKONG CHAT
+        </h2>
+        """,
+        unsafe_allow_html=True
     )
 
     st.markdown("---")
@@ -269,24 +234,21 @@ with st.sidebar:
         f"""
         <h2 style="
         text-align:center;
-        color:
-        {st.session_state.theme_color};
+        color:{st.session_state.theme_color};
         ">
         {reloj}
         </h2>
         """,
         unsafe_allow_html=True
     )
-  if connected:
+    if menu == "💬 Chat":
+
     st.markdown(
-        "algo"
-    )
         f"""
         <h1 style="
         text-align:center;
-        font-size:70px;
-        color:
-        {st.session_state.theme_color};
+        font-size:60px;
+        color:{st.session_state.theme_color};
         ">
         🦍 KINGKONG CHAT
         </h1>
@@ -305,17 +267,18 @@ with st.sidebar:
             )
 
     prompt = st.chat_input(
-        "Pregunta lo que quieras..."
+        "Escribe un mensaje..."
     )
 
     if prompt:
 
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": prompt
-        }
-    )
+        st.session_state.messages.append(
+            {
+                "role":"user",
+                "content":prompt
+            }
+        )
+
         try:
 
             response = model.generate_content(
@@ -326,13 +289,14 @@ with st.sidebar:
 
         except Exception as e:
 
-            answer = str(e)
+            answer = f"Error: {e}"
 
         st.session_state.messages.append(
-        {
-            "role":"assistant",
-            "content":answer
-        })
+            {
+                "role":"assistant",
+                "content":answer
+            }
+        )
 
         st.rerun()
 
@@ -358,14 +322,12 @@ elif menu == "📁 Archivos":
             )
 
         st.success(
-            uploaded.name
+            f"Guardado: {uploaded.name}"
         )
 
 else:
 
     st.title("⚙️ Ajustes")
-
-    st.subheader("🎨 Colores")
 
     st.session_state.theme_color = st.color_picker(
         "Color Principal",
@@ -377,29 +339,13 @@ else:
         st.session_state.secondary_color
     )
 
-    st.session_state.text_color = st.color_picker(
-        "Color Texto",
-        st.session_state.text_color
-    )
-
     st.session_state.input_color = st.color_picker(
-        "Color Input",
+        "Color Caja Escritura",
         st.session_state.input_color
     )
 
-    st.markdown("---")
-
-    st.subheader("📏 Diseño")
-
-    st.session_state.chat_width = st.slider(
-        "Ancho Chat",
-        800,
-        1900,
-        st.session_state.chat_width
-    )
-
     st.session_state.font_size = st.slider(
-        "Texto",
+        "Tamaño Texto",
         12,
         28,
         st.session_state.font_size
@@ -412,7 +358,12 @@ else:
         st.session_state.radius
     )
 
-    st.markdown("---")
+    st.session_state.chat_width = st.slider(
+        "Ancho Chat",
+        800,
+        1900,
+        st.session_state.chat_width
+    )
 
     if st.button(
         "🗑️ Borrar historial"
@@ -421,4 +372,3 @@ else:
         st.session_state.messages = []
 
         st.rerun()
-        
