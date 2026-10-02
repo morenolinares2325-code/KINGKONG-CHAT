@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
-# --------------------------------------------------
-# CONFIG
-# --------------------------------------------------
+# =====================================================
+# CONFIGURACION
+# =====================================================
 
 load_dotenv()
 
@@ -18,15 +18,24 @@ model = genai.GenerativeModel(
     "gemini-1.5-flash"
 )
 
-# --------------------------------------------------
-# CARPETAS
-# --------------------------------------------------
-
 Path("uploads").mkdir(exist_ok=True)
 
-# --------------------------------------------------
-# TEMA KINGKONG
-# --------------------------------------------------
+# =====================================================
+# CONFIG INICIAL
+# =====================================================
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "main_color" not in st.session_state:
+    st.session_state.main_color = "#39FF14"
+
+if "chat_width" not in st.session_state:
+    st.session_state.chat_width = "1200px"
+
+# =====================================================
+# PAGINA
+# =====================================================
 
 st.set_page_config(
     page_title="KINGKONG CHAT",
@@ -34,132 +43,108 @@ st.set_page_config(
     layout="wide"
 )
 
-st.markdown("""
+MAIN_COLOR = st.session_state.main_color
+
+# =====================================================
+# CSS KINGKONG
+# =====================================================
+
+st.markdown(f"""
 <style>
 
-/* Fondo principal */
-.stApp{
-    background-color:#0d1117;
-    color:#f5f5f5;
-}
+.stApp {{
+    background-color:#050505;
+    color:white;
+}}
 
-/* Sidebar */
-section[data-testid="stSidebar"]{
-    background-color:#111111;
-}
+section[data-testid="stSidebar"] {{
+    background-color:#101010;
+    border-right:2px solid {MAIN_COLOR};
+}}
 
-/* Títulos */
-h1,h2,h3{
-    color:#39ff14;
-}
+h1,h2,h3 {{
+    color:{MAIN_COLOR};
+    text-shadow:0 0 10px {MAIN_COLOR};
+}}
 
-/* Inputs */
-.stChatInput input{
-    background-color:#1b1b1b !important;
+.block-container {{
+    max-width:{st.session_state.chat_width};
+}}
+
+[data-testid="stChatMessage"] {{
+    background-color:#181818;
+    border:1px solid #2a2a2a;
+    border-radius:15px;
+    padding:14px;
+}}
+
+.stChatInput input {{
+    background:#151515 !important;
     color:white !important;
-}
+    border:1px solid {MAIN_COLOR} !important;
+}}
 
-/* Botones */
-.stButton button{
-    background-color:#39ff14;
+.stButton button {{
+    background:{MAIN_COLOR};
     color:black;
     border:none;
+    border-radius:10px;
     font-weight:bold;
-}
+}}
 
-/* File uploader */
-[data-testid="stFileUploader"]{
-    background-color:#1b1b1b;
+div[data-testid="stFileUploader"] {{
+    background:#181818;
     border-radius:12px;
     padding:10px;
-}
+}}
 
-/* Mensajes */
-[data-testid="stChatMessage"]{
-    background-color:#161b22;
-    border-radius:12px;
-    padding:10px;
-    margin-bottom:10px;
-}
+.neon {{
+    color:{MAIN_COLOR};
+    font-weight:bold;
+    text-shadow:0px 0px 10px {MAIN_COLOR};
+}}
 
 </style>
 """, unsafe_allow_html=True)
 
-# --------------------------------------------------
-# ESTADO CHAT
-# --------------------------------------------------
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# --------------------------------------------------
+# =====================================================
 # SIDEBAR
-# --------------------------------------------------
+# =====================================================
 
 with st.sidebar:
 
     st.markdown(
-        "## 🦍 KINGKONG CHAT"
+        "<h2 class='neon'>🦍 KINGKONG CHAT</h2>",
+        unsafe_allow_html=True
     )
 
     st.markdown("---")
 
-    section = st.radio(
+    menu = st.radio(
         "",
         [
+            "💬 Chat",
             "📁 Archivos",
-            "🤖 IA",
-            "⚙️ Sistema"
-        ]
+            "⚙️ Ajustes"
+        ],
+        label_visibility="collapsed"
     )
 
     st.markdown("---")
 
     st.success("🟢 Gemini Online")
 
-# --------------------------------------------------
-# ARCHIVOS
-# --------------------------------------------------
+# =====================================================
+# CHAT PRINCIPAL
+# =====================================================
 
-if section == "📁 Archivos":
+if menu == "💬 Chat":
 
-    st.title("📁 Archivos")
+    st.title("🦍 KINGKONG CHAT")
 
-    uploaded_file = st.file_uploader(
-        "Subir archivo"
+    st.caption(
+        "Tu centro de comunicación e IA."
     )
-
-    if uploaded_file:
-
-        save_path = (
-            Path("uploads")
-            / uploaded_file.name
-        )
-
-        with open(save_path, "wb") as f:
-            f.write(uploaded_file.read())
-
-        st.success(
-            f"Archivo guardado: {uploaded_file.name}"
-        )
-
-    st.subheader("Archivos disponibles")
-
-    files = list(Path("uploads").glob("*"))
-
-    if not files:
-        st.info("No hay archivos")
-
-    for file in files:
-        st.write(f"📄 {file.name}")
-
-# --------------------------------------------------
-# IA
-# --------------------------------------------------
-
-elif section == "🤖 IA":
-
-    st.title("🤖 KINGKONG CHAT")
 
     for msg in st.session_state.messages:
 
@@ -167,17 +152,15 @@ elif section == "🤖 IA":
             st.markdown(msg["content"])
 
     prompt = st.chat_input(
-        "Pregunta a Gemini..."
+        "Escribe un mensaje..."
     )
 
     if prompt:
 
-        st.session_state.messages.append(
-            {
-                "role": "user",
-                "content": prompt
-            }
-        )
+        st.session_state.messages.append({
+            "role":"user",
+            "content":prompt
+        })
 
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -198,29 +181,113 @@ elif section == "🤖 IA":
 
             st.markdown(reply)
 
-        st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": reply
-            }
-        )
+        st.session_state.messages.append({
+            "role":"assistant",
+            "content":reply
+        })
 
-# --------------------------------------------------
-# SISTEMA
-# --------------------------------------------------
+# =====================================================
+# ARCHIVOS
+# =====================================================
 
-else:
+elif menu == "📁 Archivos":
 
-    st.title("⚙️ Sistema")
+    st.title("📁 Archivos")
 
-    st.info(
-        "Preparado para futuras configuraciones."
+    uploaded = st.file_uploader(
+        "Subir archivo"
     )
 
-    st.write(
-        "• Cambiar IA\n"
-        "• Conectar Qwen\n"
-        "• Exportar historial\n"
-        "• Importar backup\n"
-        "• Configuración usuario"
+    if uploaded:
+
+        destination = (
+            Path("uploads")
+            / uploaded.name
+        )
+
+        with open(destination, "wb") as f:
+            f.write(
+                uploaded.getbuffer()
+            )
+
+        st.success(
+            f"Archivo guardado: {uploaded.name}"
+        )
+
+    st.markdown("### Archivos disponibles")
+
+    files = list(
+        Path("uploads").glob("*")
+    )
+
+    if not files:
+
+        st.info(
+            "No hay archivos cargados."
+        )
+
+    for file in files:
+
+        size_mb = (
+            file.stat().st_size
+            / 1024
+            / 1024
+        )
+
+        st.markdown(
+            f"📄 **{file.name}** ({size_mb:.2f} MB)"
+        )
+
+# =====================================================
+# AJUSTES
+# =====================================================
+
+elif menu == "⚙️ Ajustes":
+
+    st.title("⚙️ Ajustes")
+
+    st.subheader("🎨 Color Principal")
+
+    color = st.color_picker(
+        "Selecciona color",
+        MAIN_COLOR
+    )
+
+    if color != MAIN_COLOR:
+
+        st.session_state.main_color = color
+
+    st.markdown("---")
+
+    st.subheader("📏 Tamaño del Chat")
+
+    width = st.selectbox(
+        "",
+        [
+            "900px",
+            "1200px",
+            "1500px",
+            "100%"
+        ],
+        index=1
+    )
+
+    st.session_state.chat_width = width
+
+    st.markdown("---")
+
+    st.subheader("ℹ️ Información")
+
+    st.write("""
+    KINGKONG CHAT V1
+
+    - Chat Gemini
+    - Gestión de archivos
+    - Preparado para Qwen
+    - Preparado para KINGKONG AI
+    - Preparado para VPS
+    """)
+
+    st.success(
+        "Los cambios visuales se aplicarán al recargar."
     )
