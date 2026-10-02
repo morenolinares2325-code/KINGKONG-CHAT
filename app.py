@@ -144,17 +144,31 @@ if prompt:
         for m in st.session_state.messages:
             historial.append({"role": m["role"], "content": m["content"]})
 
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=historial,
-            stream=True
-        )
+        full_text = ""
+        modelos_disponibles = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        stream = None
+        error_capturado = None
 
-        def stream_gen():
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+        for modelo in modelos_disponibles:
+            try:
+                stream = client.chat.completions.create(
+                    model=modelo,
+                    messages=historial,
+                    stream=True
+                )
+                break
+            except Exception as err:
+                error_capturado = err
+                continue
 
-        full_text = st.write_stream(stream_gen())
+        if stream is not None:
+            def stream_gen():
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            full_text = st.write_stream(stream_gen())
+        else:
+            full_text = f"⚠️ Error en Groq: {error_capturado}"
+            st.error(full_text)
 
     st.session_state.messages.append({"role": "assistant", "content": full_text})
