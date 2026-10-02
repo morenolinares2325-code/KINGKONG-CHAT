@@ -137,7 +137,7 @@ background: rgba(16, 26, 18, 0.82) !important;
 
     [data-testid="stChatMessage"] p, 
     [data-testid="stChatMessage"] span, 
-    [data-testid="stChatMessage"] div,
+    [data-testid="stChatMessage"] div, 
     [data-testid="stChatMessage"] li {{
         color: #FFFFFF !important;
         font-size: {st.session_state.font_size}px !important;
@@ -247,7 +247,7 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 with st.chat_message("assistant", avatar="🦍"):
             historial = [
-                {"role": "system", "content": "Eres KingKong, un asistente inteligente, directo y conciso con temática tecnológica de selva."}
+                {"role": "system", "content": "Eres KingKong, un asistente conciso, ágil, directo y servicial con estilo selvático."}
             ]
             for m in st.session_state.messages:
                 historial.append({"role": m["role"], "content": m["content"]})
@@ -296,13 +296,6 @@ elif menu == "👥 Sala de Conversación":
         unsafe_allow_html=True
     )
 
-    with st.expander("👤 Configurar tu Nombre y Adjuntar Archivos", expanded=False):
-        col_u, col_f = st.columns([1, 2])
-        with col_u:
-            st.session_state.user_name = st.text_input("Tu nombre / alias:", value=st.session_state.user_name)
-        with col_f:
-            archivo_compartido = st.file_uploader("Adjuntar archivo o imagen:", key="uploader_sala")
-
     for msg in st.session_state.room_messages:
         with st.chat_message("user", avatar="💬"):
             st.markdown(f"{msg['user']} <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
@@ -314,34 +307,44 @@ elif menu == "👥 Sala de Conversación":
                 else:
                     st.markdown(f"📎 Archivo adjunto: {msg['file_name']}")
 
-    mensaje_sala = st.chat_input("Escribe en la sala para todos...")
+    # Formulario de envío limpio y robusto para evitar colisiones
+    with st.form("form_sala", clear_on_submit=True):
+        col_u, col_t = st.columns([1, 3])
+        with col_u:
+            nombre_input = st.text_input("Tu alias:", value=st.session_state.user_name)
+        with col_t:
+            texto_input = st.text_input("Mensaje para la sala:", placeholder="Escribe algo aquí...")
 
-    if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la Sala")):
-        hora_actual = datetime.now().strftime("%H:%M")
-        nuevo_mensaje = {
-            "user": st.session_state.user_name,
-            "time": hora_actual,
-            "text": mensaje_sala if mensaje_sala else "",
-            "file_name": None,
-            "file_path": None,
-            "is_image": False
-        }
+        archivo_input = st.file_uploader("Adjuntar archivo o imagen (opcional):", key="file_sala")
+        enviar = st.form_submit_button("📤 Enviar Mensaje a la Sala", use_container_width=True)
 
-        if archivo_compartido:
-            ruta_guardada = UPLOADS_DIR / archivo_compartido.name
-            with open(ruta_guardada, "wb") as f:
-                f.write(archivo_compartido.getbuffer())
-            
-            nuevo_mensaje["file_name"] = archivo_compartido.name
-            nuevo_mensaje["file_path"] = str(ruta_guardada)
-            nuevo_mensaje["is_image"] = archivo_compartido.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+        if enviar and (texto_input or archivo_input):
+            st.session_state.user_name = nombre_input
+            hora_actual = datetime.now().strftime("%H:%M")
+            nuevo_mensaje = {
+                "user": nombre_input,
+                "time": hora_actual,
+                "text": texto_input if texto_input else "",
+                "file_name": None,
+                "file_path": None,
+                "is_image": False
+            }
 
-        st.session_state.room_messages.append(nuevo_mensaje)
-        st.rerun()
+            if archivo_input:
+                ruta_guardada = UPLOADS_DIR / archivo_input.name
+                with open(ruta_guardada, "wb") as f:
+                    f.write(archivo_input.getbuffer())
+                
+                nuevo_mensaje["file_name"] = archivo_input.name
+                nuevo_mensaje["file_path"] = str(ruta_guardada)
+                nuevo_mensaje["is_image"] = archivo_input.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+st.session_state.room_messages.append(nuevo_mensaje)
+            st.rerun()
 
 # =================================================
 # PANTALLA: ARCHIVOS
 # =================================================
+
 elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
@@ -392,7 +395,7 @@ else:
     st.subheader("🧹 Mantenimiento")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🗑️️ Borrar Historial de Chat", use_container_width=True):
+        if st.button("🗑️ Borrar Historial de Chat", use_container_width=True):
             st.session_state.messages = []
             st.success("Historial eliminado.")
             st.rerun()
