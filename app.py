@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 from pathlib import Path
 from datetime import datetime
 import os
+import json
 import base64
 from groq import Groq
 
@@ -20,6 +21,7 @@ st.set_page_config(
 BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
 ASSETS_DIR = BASE_DIR / "assets"
 UPLOADS_DIR = BASE_DIR / "uploads"
+CONFIG_FILE = BASE_DIR / "theme_config.json"
 
 ASSETS_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
@@ -41,6 +43,39 @@ def get_background_css() -> str:
     return ""
 
 # =================================================
+# PERSISTENCIA DE CONFIGURACIÓN DE COLORES
+# =================================================
+
+default_settings = {
+    "theme_color": "#39FF14",
+    "secondary_color": "#00C853",
+    "input_color": "#FFFFFF",
+    "text_color": "#FFFFFF",
+    "code_bg_color": "#FFFFFF",
+    "code_text_color": "#111111",
+    "font_size": 16,
+    "radius": 18,
+    "user_name": "Explorador"
+}
+
+saved_settings = {}
+if CONFIG_FILE.exists():
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            saved_settings = json.load(f)
+    except Exception:
+        pass
+
+for key, default_val in default_settings.items():
+    if key not in st.session_state:
+        st.session_state[key] = saved_settings.get(key, default_val)
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "room_messages" not in st.session_state:
+    st.session_state.room_messages = []
+
+# =================================================
 # CONEXIÓN CON GROQ
 # =================================================
 
@@ -53,26 +88,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTADOS DE SESIÓN (SESSION STATE)
-# =================================================
-
-defaults = {
-    "messages": [],
-    "room_messages": [],
-    "user_name": "Explorador",
-    "theme_color": "#39FF14",
-    "secondary_color": "#00C853",
-    "input_color": "#FFFFFF",
-    "font_size": 16,
-    "radius": 18
-}
-
-for key, val in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
-
-# =================================================
-# ESTILOS CSS (JUNGLE CONSOLE EDITION)
+# ESTILOS CSS CON CONTROL TOTAL DE CÓDIGO Y TEXTO
 # =================================================
 
 bg_css = get_background_css()
@@ -80,6 +96,7 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
+    /* 1. Fondo de la aplicación */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(0, 0, 0, 0.78), rgba(4, 12, 6, 0.88)),
@@ -95,6 +112,7 @@ st.markdown(
         background-color: transparent !important;
     }}
 
+    /* 2. Barra inferior */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -111,6 +129,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
+    /* 3. Input de texto */
     .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
@@ -126,8 +145,9 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
+    /* 4. Mensajes del chat */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.82) !important;
+        background: rgba(16, 26, 18, 0.85) !important;
         backdrop-filter: blur(14px);
         border: 1px solid rgba(255, 255, 255, 0.22) !important;
         border-radius: {st.session_state.radius}px !important;
@@ -137,13 +157,30 @@ st.markdown(
 
     [data-testid="stChatMessage"] p, 
     [data-testid="stChatMessage"] span, 
-    [data-testid="stChatMessage"] div, 
     [data-testid="stChatMessage"] li {{
-        color: #FFFFFF !important;
+        color: {st.session_state.text_color} !important;
         font-size: {st.session_state.font_size}px !important;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
     }}
 
+    /* 5. Cajas de código: solucionado contraste */
+    [data-testid="stChatMessage"] pre,
+    [data-testid="stChatMessage"] div[data-testid="stCodeBlock"],
+    [data-testid="stChatMessage"] pre > code {{
+        background-color: {st.session_state.code_bg_color} !important;
+        color: {st.session_state.code_text_color} !important;
+        font-family: 'Consolas', 'Courier New', monospace !important;
+        font-size: {max(st.session_state.font_size - 1, 13)}px !important;
+        border-radius: 10px !important;
+        text-shadow: none !important;
+    }}
+
+    /* Tokens internos de sintaxis de Streamlit */
+    [data-testid="stChatMessage"] pre code * {{
+        color: {st.session_state.code_text_color} !important;
+        text-shadow: none !important;
+    }}
+
+    /* 6. Barra lateral */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
@@ -152,8 +189,7 @@ st.markdown(
 
     h1, h2, h3 {{
         color: {st.session_state.theme_color} !important;
-        text-shadow: 0 0 10px {st.session_state.theme_color}66, 0 0 25px {st.session_state.theme_color}33;
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        text-shadow: 0 0 10px {st.session_state.theme_color}66;
     }}
 
     footer {{
@@ -221,7 +257,7 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT PRINCIPAL (ROBUSTO CONTRA ERROR 400)
+# PANTALLA: CHAT PRINCIPAL
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -247,42 +283,28 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            # Historial estrictamente saneado sin fallos ni vacíos
-            historial = [{"role": "system", "content": "Eres KingKong, un asistente directo, rápido y servicial en una atmósfera de selva tecnológica."}]
-            for m in st.session_state.messages:
+            # Saneamiento del historial limitando últimos mensajes para no desbordar tokens
+            historial = [{"role": "system", "content": "Eres KingKong, un asistente conciso, ágil y directo."}]
+            ultimos_mensajes = st.session_state.messages[-6:]
+            for m in ultimos_mensajes:
                 txt = (m.get("content") or "").strip()
                 if txt and not txt.startswith("⚠️"):
+                    if len(txt) > 12000:
+                        txt = txt[:12000] + "\n\n[... Código truncado ...]"
                     historial.append({"role": m["role"], "content": txt})
 
             full_response = ""
             stream = None
             error_detalles = None
 
-            # Prioridad de modelos de chat activos en Groq (excluyendo whisper y guard)
-            modelos_ordenados = [
-                "openai/gpt-oss-120b",
-                "openai/gpt-oss-20b",
+            candidatos = [
                 "llama-3.3-70b-versatile",
-                "qwen/qwen3.8-27b",
-                "qwen/qwen3.6-27b",
-                "llama3-70b-8192"
+                "llama-3.1-70b-versatile",
+                "llama3-70b-8192",
+                "mixtral-8x7b-32768"
             ]
 
-            # Intentar obtener los modelos autorizados por tu key
-            try:
-                lista_api = [m.id for m in client.models.list().data if not any(x in m.id for x in ["whisper", "guard", "orpheus"])]
-                # Poner al principio de la lista los que la API confirme que existen
-                candidatos = [m for m in modelos_ordenados if m in lista_api] + [m for m in lista_api if m not in modelos_ordenados] + modelos_ordenados
-            except Exception:
-                candidatos = modelos_ordenados
-
-            # Eliminar duplicados manteniendo orden
-            candidatos_unicos = []
-            for c in candidatos:
-                if c not in candidatos_unicos:
-                    candidatos_unicos.append(c)
-
-            for m_id in candidatos_unicos:
+            for m_id in candidatos:
                 try:
                     stream = client.chat.completions.create(
                         model=m_id,
@@ -378,7 +400,7 @@ elif menu == "👥 Sala de Conversación":
 elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
-    st.subheader("🖼️ Cambiar Fondo de Pantalla")
+    st.subheader("🖼️️ Cambiar Fondo de Pantalla")
     nuevo_fondo = st.file_uploader(
         "Subir nueva imagen de fondo",
         type=["jpg", "jpeg", "png"],
@@ -402,7 +424,7 @@ elif menu == "📁 Archivos":
         st.caption("No hay archivos subidos todavía.")
 
 # =================================================
-# PANTALLA: AJUSTES
+# PANTALLA: AJUSTES (CON GUARDADO DE COLORES)
 # =================================================
 
 else:
@@ -411,27 +433,44 @@ else:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("🎨 Colores y Tema")
+        st.subheader("🎨 Colores Generales")
         st.session_state.theme_color = st.color_picker("Color Neón Principal", st.session_state.theme_color)
         st.session_state.secondary_color = st.color_picker("Color Secundario", st.session_state.secondary_color)
+        st.session_state.text_color = st.color_picker("Color de Texto General", st.session_state.text_color)
         st.session_state.input_color = st.color_picker("Color Fondo Entrada de Texto", st.session_state.input_color)
 
     with col2:
-        st.subheader("📐 Dimensiones y Formato")
-        st.session_state.font_size = st.slider("Tamaño de Texto en Chat (px)", 12, 26, st.session_state.font_size)
+        st.subheader("💻 Colores de Bloques de Código")
+        st.session_state.code_bg_color = st.color_picker("Fondo del Bloque de Código", st.session_state.code_bg_color)
+        st.session_state.code_text_color = st.color_picker("Texto del Bloque de Código", st.session_state.code_text_color)
+        st.session_state.font_size = st.slider("Tamaño de Fuente (px)", 12, 26, st.session_state.font_size)
         st.session_state.radius = st.slider("Curvatura de Bordes (px)", 0, 35, st.session_state.radius)
 
     st.markdown("---")
-    st.subheader("🧹 Mantenimiento")
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
+    col_save, col_clear = st.columns(2)
+
+    with col_save:
+        if st.button("💾 Guardar Colores y Ajustes", use_container_width=True):
+            settings_to_save = {
+                "theme_color": st.session_state.theme_color,
+                "secondary_color": st.session_state.secondary_color,
+                "input_color": st.session_state.input_color,
+                "text_color": st.session_state.text_color,
+                "code_bg_color": st.session_state.code_bg_color,
+                "code_text_color": st.session_state.code_text_color,
+                "font_size": st.session_state.font_size,
+                "radius": st.session_state.radius,
+                "user_name": st.session_state.user_name
+            }
+            try:
+                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(settings_to_save, f, indent=4)
+                st.success("✅ Ajustes guardados permanentemente.")
+            except Exception as e:
+                st.error(f"Error al guardar: {e}")
+
+    with col_clear:
         if st.button("🗑️ Borrar Historial de Chat", use_container_width=True):
             st.session_state.messages = []
             st.success("Historial eliminado.")
-            st.rerun()
-
-    with col_btn2:
-        if st.button("🗑️ Borrar Mensajes de Sala", use_container_width=True):
-            st.session_state.room_messages = []
-            st.success("Historial de la sala eliminado.")
             st.rerun()
