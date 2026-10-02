@@ -277,9 +277,10 @@ with st.sidebar:
         """,
         unsafe_allow_html=True
     )
-    if menu == "💬 Chat":
-
+  if connected:
     st.markdown(
+        "algo"
+    )
         f"""
         <h1 style="
         text-align:center;
