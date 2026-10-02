@@ -7,7 +7,7 @@ import os
 import base64
 
 # =================================================
-# COMPATIBILIDAD CON EL SDK DE GOOGLE
+# COMPATIBILIDAD CON LIBRERÍAS DE GOOGLE
 # =================================================
 
 USE_NEW_SDK = False
@@ -32,10 +32,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =================================================
-# RUTAS Y FUNCIONES AUXILIARES
-# =================================================
-
 BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
 ASSETS_DIR = BASE_DIR / "assets"
 UPLOADS_DIR = BASE_DIR / "uploads"
@@ -51,20 +47,16 @@ def image_to_base64(path: Path) -> str:
         return ""
 
 def get_background_css() -> str:
-    posibles = [
-        ASSETS_DIR / "jungle.jpg",
-        ASSETS_DIR / "jungle.png",
-        ASSETS_DIR / "jungle.jpeg"
-    ]
-    for fondo in posibles:
+    for ext in [".jpg", ".png", ".jpeg"]:
+        fondo = ASSETS_DIR / f"jungle{ext}"
         if fondo.exists():
             b64 = image_to_base64(fondo)
-            mime = "png" if fondo.suffix.lower() == ".png" else "jpeg"
+            mime = "png" if ext == ".png" else "jpeg"
             return f'url("data:image/{mime};base64,{b64}")'
     return ""
 
 # =================================================
-# ESTADOS DE SESIÓN
+# ESTADOS DE SESIÓN (SESSION STATE)
 # =================================================
 
 defaults = {
@@ -76,15 +68,16 @@ defaults = {
     "input_color": "#FFFFFF",
     "font_size": 16,
     "radius": 18,
-    "active_model_name": "gemini-3.8-flash"
+    "active_model_name": "",
+    "verified_models": []
 }
 
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# Lista exacta de modelos solicitada en orden de prioridad
-MODELOS_CADENA = [
+# Lista ordenada de modelos deseados
+MODELOS_PRIORITARIOS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
@@ -92,11 +85,12 @@ MODELOS_CADENA = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
-    "gemini-2.0-flash"
+    "gemini-2.0-flash",
+    "gemini-1.5-flash"
 ]
 
 # =================================================
-# CARGA DE API KEY
+# DETECCIÓN DE API KEY Y MODELOS REALES
 # =================================================
 
 load_dotenv()
@@ -107,17 +101,56 @@ if "GEMINI_API_KEY" in st.secrets:
 elif os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY")
 
-connected = bool(API_KEY)
+connected = False
 
-# Función para consultar a Google con compatibilidad total
-def consultar_gemini(prompt_text: str, model_name: str, key: str):
+def obtener_modelos_disponibles(key: str):
+    """Devuelve la lista real de modelos disponibles para esta clave en Google."""
+    modelos_encontrados = []
+    try:
+        if USE_NEW_SDK:
+            client = genai.Client(api_key=key)
+            for m in client.models.list():
+                # En el nuevo SDK los modelos suelen venir con su ID
+                name = getattr(m, "name", "").replace("models/", "")
+                if "flash" in name.lower() or "gemini" in name.lower():
+                    modelos_encontrados.append(name)
+        else:
+            import google.generativeai as legacy
+            legacy.configure(api_key=key)
+            for m in legacy.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    name = m.name.replace("models/", "")
+                    modelos_encontrados.append(name)
+    except Exception:
+        pass
+    return modelos_encontrados
+
+if API_KEY:
+    connected = True
+    if not st.session_state.verified_models:
+        reales = obtener_modelos_disponibles(API_KEY)
+        if reales:
+            st.session_state.verified_models = reales
+            # Elegir el primer modelo prioritario que esté entre los disponibles
+            for p in MODELOS_PRIORITARIOS:
+                if p in reales:
+                    st.session_state.active_model_name = p
+                    break
+            if not st.session_state.active_model_name:
+                st.session_state.active_model_name = reales[0]
+        else:
+            # Si list_models no responde, asignar el primero por defecto
+            st.session_state.active_model_name = "gemini-3.8-flash"
+
+def ejecutar_consulta(prompt_text: str, model_name: str, key: str) -> str:
+    """Envío directo y con timeout controlado."""
     if USE_NEW_SDK:
         client = genai.Client(api_key=key)
-        response = client.models.generate_content(
+        res = client.models.generate_content(
             model=model_name,
             contents=prompt_text
         )
-        return response.text
+        return res.text
     else:
         import google.generativeai as legacy
         legacy.configure(api_key=key)
@@ -126,7 +159,7 @@ def consultar_gemini(prompt_text: str, model_name: str, key: str):
         return res.text
 
 # =================================================
-# ESTILOS CSS
+# ESTILOS CSS (LETRAS BLANCAS Y CERO FRANJA BLANCA)
 # =================================================
 
 bg_css = get_background_css()
@@ -167,7 +200,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
-    /* 3. Únicamente la caja de texto blanca */
+    /* 3. Píldora de texto blanca */
     .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
@@ -185,31 +218,32 @@ st.markdown(
 
     /* 4. BURBUJAS DE CHAT CON LETRAS 100% BLANCAS */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.80) !important;
+        background: rgba(16, 26, 18, 0.82) !important;
         backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border: 1px solid rgba(255, 255, 255, 0.22) !important;
         border-radius: {st.session_state.radius}px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         margin-bottom: 12px;
     }}
 
+    /* Letras blancas forzadas en toda la conversación */
     [data-testid="stChatMessage"] p, 
     [data-testid="stChatMessage"] span, 
     [data-testid="stChatMessage"] div,
     [data-testid="stChatMessage"] li {{
         color: #FFFFFF !important;
         font-size: {st.session_state.font_size}px !important;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
     }}
 
-    /* 5. Barra lateral cristal */
+    /* 5. Barra lateral translúcida */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
         border-right: 2px solid {st.session_state.theme_color}55;
     }}
 
-    /* 6. Tipografía Neón */
+    /* 6. Neón en títulos */
     h1, h2, h3 {{
         color: {st.session_state.theme_color} !important;
         text-shadow: 0 0 10px {st.session_state.theme_color}66, 0 0 25px {st.session_state.theme_color}33;
@@ -225,7 +259,7 @@ st.markdown(
 )
 
 # =================================================
-# SIDEBAR (PANEL LATERAL)
+# BARRA LATERAL (SIDEBAR)
 # =================================================
 
 with st.sidebar:
@@ -244,7 +278,7 @@ with st.sidebar:
 
     menu = st.radio(
         "Navegación",
-        ["💬 Chat con IA", "👥 Sala de Chat (Sin IA)", "📁 Archivos", "⚙️️ Ajustes"],
+        ["💬 Chat con IA", "👥 Sala de Chat (Sin IA)", "📁 Archivos", "⚙️ Ajustes"],
         label_visibility="collapsed"
     )
 
@@ -252,11 +286,12 @@ with st.sidebar:
 
     if connected:
         st.success("🟢 IA ONLINE", icon="⚡")
-        st.caption(f"🤖 Preferido: `{st.session_state.active_model_name}`")
+        modelo_mostrar = st.session_state.active_model_name or "gemini-3.8-flash"
+        st.caption(f"🤖 Modelo activo: `{modelo_mostrar}`")
     else:
         st.error("🔴 IA OFFLINE (Falta API Key)", icon="⚠️")
 
-    # Reloj en vivo continuo
+    # Reloj en vivo continuo en JavaScript
     components.html(
         f"""
         <div style="
@@ -287,7 +322,7 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT CON IA (CON CADENA FALLBACK)
+# PANTALLA: CHAT CON IA (SIN BUCLES ETERNOS)
 # =================================================
 
 if menu == "💬 Chat con IA":
@@ -301,14 +336,13 @@ if menu == "💬 Chat con IA":
     )
 
     if not connected:
-        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o configúrala en Secrets:")
+        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o guárdala en Secrets:")
         temp_key = st.text_input("Gemini API Key:", type="password")
         if temp_key:
             API_KEY = temp_key
             connected = True
             st.rerun()
 
-    # Mostrar mensajes
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
@@ -317,44 +351,47 @@ if menu == "💬 Chat con IA":
     prompt = st.chat_input("Escribe un mensaje a la IA...")
 
     if prompt:
+        # 1. Guardar mensaje usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
+        # 2. Generación rápida
         with st.chat_message("assistant", avatar="🦍"):
             full_response = ""
-            modelo_exitoso = None
-            ultimo_error = ""
-
             if connected and API_KEY:
-                # Probar en orden empezando por el preferido
-                modelos_a_probar = [st.session_state.active_model_name] + [
-                    m for m in MODELOS_CADENA if m != st.session_state.active_model_name
-                ]
-
-                with st.spinner("Conectando con la selva... 🦍"):
-                    for candidate_name in modelos_a_probar:
-                        try:
-                            respuesta_texto = consultar_gemini(prompt, candidate_name, API_KEY)
-                            if respuesta_texto:
-                                full_response = respuesta_texto
-                                modelo_exitoso = candidate_name
-                                st.session_state.active_model_name = candidate_name
+                # Si no tiene modelo asignado, usar el primero
+                modelo_a_usar = st.session_state.active_model_name or "gemini-3.8-flash"
+                
+                with st.spinner(f"Consultando a {modelo_a_usar}... 🦍"):
+                    try:
+                        full_response = ejecutar_consulta(prompt, modelo_a_usar, API_KEY)
+                    except Exception as e_primero:
+                        # Si ese modelo específico falla, probamos de inmediato con el siguiente disponible
+                        fallback_candidatos = [m for m in MODELOS_PRIORITARIOS if m != modelo_a_usar]
+                        exito = False
+                        for m_fb in fallback_candidatos:
+                            try:
+                                full_response = ejecutar_consulta(prompt, m_fb, API_KEY)
+                                st.session_state.active_model_name = m_fb
+                                exito = True
                                 break
-                        except Exception as e:
-                            ultimo_error = str(e)
-                            continue
+                            except Exception:
+                                continue
+                        
+                        if not exito:
+                            full_response = f"⚠️ Error de conexión con Gemini: {e_primero}"
 
-                if full_response:
-                    st.markdown(full_response)
-                    st.caption(f"⚡ *Respuesta generada con `{modelo_exitoso}`*")
-                else:
-                    full_response = f"⚠️ Error en la respuesta: {ultimo_error}"
+                if full_response.startswith("⚠️"):
                     st.error(full_response)
+                else:
+                    st.markdown(full_response)
+                    st.caption(f"⚡ *Modelo: `{st.session_state.active_model_name}`*")
             else:
                 full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY."
                 st.warning(full_response)
 
+        # 3. Guardar respuesta
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
@@ -483,12 +520,16 @@ else:
             0, 35,
             st.session_state.radius
         )
-        st.subheader("🤖 Modelo Prioritario")
-        st.session_state.active_model_name = st.selectbox(
-            "Seleccionar modelo preferente:",
-            MODELOS_CADENA,
-            index=MODELOS_CADENA.index(st.session_state.active_model_name) if st.session_state.active_model_name in MODELOS_CADENA else 0
-        )
+        
+        # Selector de modelo disponible
+        opciones_modelo = st.session_state.verified_models if st.session_state.verified_models else MODELOS_PRIORITARIOS
+        if opciones_modelo:
+            st.subheader("🤖 Modelo de Gemini")
+            st.session_state.active_model_name = st.selectbox(
+                "Seleccionar modelo activo:",
+                opciones_modelo,
+                index=opciones_modelo.index(st.session_state.active_model_name) if st.session_state.active_model_name in opciones_modelo else 0
+            )
 
     st.markdown("---")
     st.subheader("🧹 Mantenimiento")
@@ -500,7 +541,7 @@ else:
             st.rerun()
 
     with col_btn2:
-        if st.button("🗑️ Borrar Mensajes Sala Humana", use_container_width=True):
+        if st.button("🗑️️ Borrar Mensajes Sala Humana", use_container_width=True):
             st.session_state.room_messages = []
             st.success("Historial de la sala eliminado.")
             st.rerun()
