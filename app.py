@@ -309,12 +309,12 @@ with st.sidebar:
 
     if prompt:
 
-        st.session_state.messages.append(
+    st.session_state.messages.append(
         {
-            "role":"user",
-            "content":prompt
-        })
-
+            "role": "user",
+            "content": prompt
+        }
+    )
         try:
 
             response = model.generate_content(
