@@ -72,7 +72,7 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# ESTILOS CSS (JUNGLE CONSOLE EDITION)
+# ESTILOS CSS
 # =================================================
 
 bg_css = get_background_css()
@@ -221,7 +221,7 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT PRINCIPAL (GROQ RESILIENTE)
+# PANTALLA: CHAT PRINCIPAL
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -247,28 +247,42 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            historial = [
-                {"role": "system", "content": "Eres KingKong, un asistente conciso, ágil, directo y servicial con estilo selvático."}
-            ]
+            # Saneamiento estricto del historial (elimina mensajes vacíos o errores)
+            historial = []
             for m in st.session_state.messages:
-                historial.append({"role": m["role"], "content": m["content"]})
+                txt = (m.get("content") or "").strip()
+                if txt and not txt.startswith("⚠️"):
+                    historial.append({"role": m["role"], "content": txt})
 
             full_response = ""
             stream = None
             error_msg = None
 
-            # Modelos válidos en la infraestructura actual de Groq
-            candidatos = [
-                "llama-3.3-70b-versatile",
-                "llama3-70b-8192",
-                "llama3-8b-8192",
-                "mixtral-8x7b-32768"
-            ]
+            # 1. Obtener lista dinámica de modelos disponibles en tu cuenta Groq
+            candidatos = []
+            try:
+                models_data = client.models.list()
+                for mod in models_data.data:
+                    candidatos.append(mod.id)
+            except Exception:
+                pass
 
-            for model_id in candidatos:
+            # Modelos de respaldo estándar si la llamada de lista falla
+            respaldos = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it"
+            ]
+            for r in respaldos:
+                if r not in candidatos:
+                    candidatos.append(r)
+
+            # 2. Ejecución con streaming seguro
+            for m_id in candidatos:
                 try:
                     stream = client.chat.completions.create(
-                        model=model_id,
+                        model=m_id,
                         messages=historial,
                         stream=True
                     )
@@ -280,8 +294,10 @@ if menu == "💬 KingKong Chat":
             if stream is not None:
                 def stream_text():
                     for chunk in stream:
-                        if chunk.choices and chunk.choices[0].delta.content:
-                            yield chunk.choices[0].delta.content
+                        if chunk.choices and len(chunk.choices) > 0:
+                            content = chunk.choices[0].delta.content
+                            if content:
+                                yield content
 
                 full_response = st.write_stream(stream_text())
             else:
@@ -291,7 +307,7 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PANTALLA: SALA HUMANA (SIN IA)
+# PANTALLA: SALA DE CONVERSACIÓN HUMANA
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
@@ -318,7 +334,6 @@ elif menu == "👥 Sala de Conversación":
                 else:
                     st.markdown(f"📎 **Archivo adjunto:** `{msg['file_name']}`")
 
-    # Contenedor seguro sin colisión de variables
     st.markdown("---")
     col_u, col_t = st.columns([1, 3])
     with col_u:
