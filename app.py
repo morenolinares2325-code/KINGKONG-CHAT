@@ -1,14 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from pathlib import Path
-from datetime import datetime
 import os
 import base64
 from groq import Groq
-
-# =================================================
-# CONFIGURACIÓN
-# =================================================
 
 st.set_page_config(
     page_title="KINGKONG CHAT",
@@ -17,12 +12,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-BASE_DIR = Path(file).resolve().parent if "file" in locals() else Path.cwd()
+BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
 ASSETS_DIR = BASE_DIR / "assets"
-UPLOADS_DIR = BASE_DIR / "uploads"
-
 ASSETS_DIR.mkdir(exist_ok=True)
-UPLOADS_DIR.mkdir(exist_ok=True)
 
 def image_to_base64(path: Path) -> str:
     try:
@@ -47,26 +39,8 @@ GROQ_KEY = (
 )
 client = Groq(api_key=GROQ_KEY)
 
-# =================================================
-# ESTADOS DE SESIÓN
-# =================================================
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "room_messages" not in st.session_state:
-    st.session_state.room_messages = []
-if "user_name" not in st.session_state:
-    st.session_state.user_name = "Explorador"
-if "theme_color" not in st.session_state:
-    st.session_state.theme_color = "#39FF14"
-if "font_size" not in st.session_state:
-    st.session_state.font_size = 16
-if "radius" not in st.session_state:
-    st.session_state.radius = 18
-
-# =================================================
-# ESTILOS CSS
-# =================================================
 
 bg_css = get_background_css()
 
@@ -87,26 +61,26 @@ st.markdown(
     .stChatInput textarea, .stChatInput input {{
         background-color: #FFFFFF !important;
         color: #111111 !important;
-        font-size: {st.session_state.font_size}px !important;
-        border: 2px solid {st.session_state.theme_color} !important;
+        font-size: 16px !important;
+        border: 2px solid #39FF14 !important;
         border-radius: 25px !important;
     }}
     [data-testid="stChatMessage"] {{
         background: rgba(16, 26, 18, 0.82) !important;
         border: 1px solid rgba(255, 255, 255, 0.22) !important;
-        border-radius: {st.session_state.radius}px !important;
+        border-radius: 18px !important;
         margin-bottom: 12px;
     }}
     [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] span, [data-testid="stChatMessage"] div {{
         color: #FFFFFF !important;
-        font-size: {st.session_state.font_size}px !important;
+        font-size: 16px !important;
     }}
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3,15,6,0.95), rgba(7,24,12,0.95)) !important;
-        border-right: 2px solid {st.session_state.theme_color}55;
+        border-right: 2px solid #39FF1455;
     }}
     h1, h2, h3 {{
-        color: {st.session_state.theme_color} !important;
+        color: #39FF14 !important;
     }}
     footer {{ visibility: hidden; }}
     </style>
@@ -114,64 +88,58 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# =================================================
-# SIDEBAR
-# =================================================
-sidebar = st.sidebar
-sidebar.markdown(
-    """
-    <div style="text-align: center; margin-top: -15px;">
-        <span style="font-size: 64px;">🦍</span>
-        <h2 style="margin: 0; font-size: 24px;">KINGKONG CHAT</h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-sidebar.markdown("---")
-menu = sidebar.radio("Navegación", ["💬 KingKong Chat", "👥 Sala de Conversación", "📁 Archivos", "⚙️ Ajustes"], label_visibility="collapsed")
-sidebar.markdown("---")
-sidebar.success("🟢 SISTEMA CONECTADO", icon="⚡")
+with st.sidebar:
+    st.markdown(
+        """
+        <div style="text-align: center; margin-top: -15px;">
+            <span style="font-size: 64px;">🦍</span>
+            <h2 style="margin: 0; font-size: 24px;">KINGKONG CHAT</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+    st.success("🟢 SISTEMA CONECTADO", icon="⚡")
+    if st.button("🗑️ Borrar Historial", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
 
-components.html(
-    f"""
-    <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 10px; font-family: sans-serif;">
-        <div style="color: #aaa; font-size: 10px;">TIEMPO EN VIVO</div>
-        <div id="live_clock" style="font-size: 22px; font-weight: bold; color: {st.session_state.theme_color};">00:00:00</div>
-    </div>
-    <script>
-        function updateClock() {{
-            const now = new Date();
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            const s = String(now.getSeconds()).padStart(2, '0');
-            document.getElementById('live_clock').innerText = h + ':' + m + ':' + s;
-        }}
-        updateClock();
-        setInterval(updateClock, 1000);
-    </script>
-    """,
-    height=80
-)
+    components.html(
+        """
+        <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 10px; font-family: sans-serif; margin-top: 15px;">
+            <div style="color: #aaa; font-size: 10px;">TIEMPO EN VIVO</div>
+            <div id="live_clock" style="font-size: 22px; font-weight: bold; color: #39FF14;">00:00:00</div>
+        </div>
+        <script>
+            function updateClock() {
+                const now = new Date();
+                const h = String(now.getHours()).padStart(2, '0');
+                const m = String(now.getMinutes()).padStart(2, '0');
+                const s = String(now.getSeconds()).padStart(2, '0');
+                document.getElementById('live_clock').innerText = h + ':' + m + ':' + s;
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        </script>
+        """,
+        height=85
+    )
 
-# =================================================
-# CHAT PRINCIPAL
-# =================================================
+st.markdown("<h1 style='text-align:center;'>🦍 KINGKONG CHAT</h1>", unsafe_allow_html=True)
 
-if menu == "💬 KingKong Chat":
-    st.markdown("<h1 style='text-align:center;'>🦍 KINGKONG CHAT</h1>", unsafe_allow_html=True)
+for msg in st.session_state.messages:
+    avatar = "🦍" if msg["role"] == "assistant" else "👤"
+    with st.chat_message(msg["role"], avatar=avatar):
+        st.markdown(msg["content"])
 
-    for msg in st.session_state.messages:
-        avatar = "🦍" if msg["role"] == "assistant" else "👤"
-        chat_box = st.chat_message(msg["role"], avatar=avatar)
-        chat_box.markdown(msg["content"])
+prompt = st.chat_input("Escribe un mensaje a KingKong...")
 
-    prompt = st.chat_input("Escribe un mensaje a KingKong...")
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        user_box = st.chat_message("user", avatar="👤")
-        user_box.markdown(prompt)
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user", avatar="👤"):
+        st.markdown(prompt)
 
-        asst_box = st.chat_message("assistant", avatar="🦍")
+    with st.chat_message("assistant", avatar="🦍"):
         historial = [{"role": "system", "content": "Eres KingKong, un asistente conciso, ágil y directo."}]
         for m in st.session_state.messages:
             historial.append({"role": m["role"], "content": m["content"]})
@@ -187,80 +155,6 @@ if menu == "💬 KingKong Chat":
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
-        full_text = asst_box.write_stream(stream_gen())
-        st.session_state.messages.append({"role": "assistant", "content": full_text})
+        full_text = st.write_stream(stream_gen())
 
-# =================================================
-# SALA DE CONVERSACIÓN HUMANA
-# =================================================
-
-elif menu == "👥 Sala de Conversación":
-    st.markdown("<h1 style='text-align:center;'>👥 SALA DE CONVERSACIÓN</h1>", unsafe_allow_html=True)
-
-    for msg in st.session_state.room_messages:
-        room_box = st.chat_message("user", avatar="💬")
-        room_box.markdown(f"{msg['user']} <small>({msg['time']})</small>", unsafe_allow_html=True)
-        if msg.get("text"):
-            room_box.markdown(msg["text"])
-        if msg.get("file_name"):
-            if msg.get("is_image"):
-                room_box.image(msg["file_path"], caption=msg["file_name"], width=300)
-            else:
-                room_box.markdown(f"📎 {msg['file_name']}")
-
-    # Controles directos sin bloques with anidados
-    c1, c2 = st.columns([1, 3])
-    u_name = c1.text_input("Alias:", value=st.session_state.user_name)
-    t_msg = c2.text_input("Mensaje:", placeholder="Escribe aquí...", key="input_sala_txt")
-    up_file = st.file_uploader("Adjuntar archivo/imagen:", key="file_sala_upload")
-    submit = st.button("📤 Enviar a la sala", use_container_width=True)
-if submit and (t_msg or up_file):
-        st.session_state.user_name = u_name
-        ahora = datetime.now().strftime("%H:%M")
-        nuevo = {
-            "user": u_name,
-            "time": ahora,
-            "text": t_msg if t_msg else "",
-            "file_name": None,
-            "file_path": None,
-            "is_image": False
-        }
-        if up_file:
-            path = UPLOADS_DIR / up_file.name
-            with open(path, "wb") as f:
-                f.write(up_file.getbuffer())
-            nuevo["file_name"] = up_file.name
-            nuevo["file_path"] = str(path)
-            nuevo["is_image"] = up_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-        st.session_state.room_messages.append(nuevo)
-        st.rerun()
-
-# =================================================
-# GESTOR DE ARCHIVOS
-# =================================================
-
-elif menu == "📁 Archivos":
-    st.title("📁 Gestor de Archivos y Fondo")
-    nuevo_fondo = st.file_uploader("Cambiar fondo", type=["jpg", "jpeg", "png"])
-    if nuevo_fondo:
-        with open(ASSETS_DIR / "jungle.jpg", "wb") as f:
-            f.write(nuevo_fondo.getbuffer())
-        st.success("Fondo actualizado.")
-        st.rerun()
-
-    st.markdown("---")
-    for arc in list(UPLOADS_DIR.glob("*")):
-        st.text(f"• {arc.name}")
-
-# =================================================
-# AJUSTES
-# =================================================
-
-else:
-    st.title("⚙️️ Ajustes")
-    st.session_state.theme_color = st.color_picker("Color Neón", st.session_state.theme_color)
-    st.session_state.font_size = st.slider("Tamaño de Fuente", 12, 24, st.session_state.font_size)
-    st.session_state.radius = st.slider("Curvatura Burbujas", 0, 30, st.session_state.radius)
-    if st.button("🗑️ Borrar Historial Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.rerun()
+    st.session_state.messages.append({"role": "assistant", "content": full_text})
