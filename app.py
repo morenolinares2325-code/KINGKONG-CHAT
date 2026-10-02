@@ -58,7 +58,7 @@ defaults = {
     "messages": [],
     "theme_color": "#39FF14",       # Verde neón
     "secondary_color": "#00C853",   # Verde selva
-    "input_color": "#FFFFFF",
+    "input_color": "#FFFFFF",       # Caja de chat blanca
     "font_size": 16,
     "radius": 18,
     "chat_width": 1000
@@ -69,11 +69,17 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# CONEXIÓN CON GEMINI
+# CONEXIÓN CON GEMINI (SECRETS Y .ENV)
 # =================================================
 
 load_dotenv()
-API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# Lee de st.secrets (Streamlit Cloud o .streamlit/secrets.toml) o de .env
+API_KEY = None
+if "GEMINI_API_KEY" in st.secrets:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+elif os.getenv("GEMINI_API_KEY"):
+    API_KEY = os.getenv("GEMINI_API_KEY")
 
 connected = False
 model = None
@@ -81,13 +87,14 @@ model = None
 if API_KEY:
     try:
         genai.configure(api_key=API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # Usamos gemini-2.0-flash para evitar el 404
+        model = genai.GenerativeModel("gemini-2.0-flash")
         connected = True
-    except Exception:
+    except Exception as e:
         connected = False
 
 # =================================================
-# ESTILOS CSS AVANZADOS (GLASSMORPHISM Y NEÓN)
+# ESTILOS CSS AVANZADOS (SIN FRANJA BLANCA)
 # =================================================
 
 bg_css = get_background_css()
@@ -95,7 +102,7 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* 1. Fondo global con oscurecimiento para lectura cómoda */
+    /* 1. Fondo global oscuro de jungla */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(0, 0, 0, 0.78), rgba(4, 12, 6, 0.88)),
@@ -107,56 +114,72 @@ st.markdown(
         background-repeat: no-repeat !important;
     }}
 
-    /* Barra superior transparente */
+    /* 2. Barra superior transparente */
     [data-testid="stHeader"] {{
         background-color: transparent !important;
     }}
 
-    /* 2. Barra lateral con efecto cristal */
+    /* 3. ELIMINAR LA FRANJA BLANCA INFERIOR DE STREAMLIT */
+    [data-testid="stBottom"],
+    footer,
+    [data-testid="stBottom"] > div {{
+        background: transparent !important;
+        background-color: transparent !important;
+    }}
+
+    .stChatFloatingInputContainer,
+    [data-testid="stChatInput"],
+    .stChatInputContainer {{
+        background: transparent !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+        padding-bottom: 20px !important;
+    }}
+
+    /* 4. ÚNICAMENTE LA CAJA DE TEXTO BLANCA ESTILO TELEGRAM */
+    .stChatInput textarea, 
+    .stChatInput input {{
+        background-color: {st.session_state.input_color} !important;
+        color: #111111 !important;
+        font-size: {st.session_state.font_size}px !important;
+        font-weight: 500 !important;
+        border: 2px solid {st.session_state.theme_color} !important;
+        border-radius: 25px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 12px {st.session_state.theme_color}44 !important;
+    }}
+
+    .stChatInput button {{
+        color: {st.session_state.theme_color} !important;
+    }}
+
+    /* 5. Barra lateral con efecto cristal */
     section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, rgba(3, 15, 6, 0.94), rgba(7, 24, 12, 0.94)) !important;
+        background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
         border-right: 2px solid {st.session_state.theme_color}55;
     }}
 
-    /* 3. Tarjetas de mensajes de chat */
+    /* 6. Burbujas de mensajes */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.65) !important;
+        background: rgba(16, 26, 18, 0.70) !important;
         backdrop-filter: blur(14px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: {st.session_state.radius}px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         margin-bottom: 12px;
-        transition: transform 0.2s ease, border-color 0.2s ease;
     }}
 
     [data-testid="stChatMessage"]:hover {{
         border-color: {st.session_state.theme_color}66;
     }}
 
-    /* 4. Campo de entrada de texto estilo Telegram / KingKong */
-    .stChatInputContainer {{
-        padding-bottom: 15px;
-    }}
-
-    .stChatInput textarea, .stChatInput input {{
-        background-color: {st.session_state.input_color} !important;
-        color: #111111 !important;
-        font-size: {st.session_state.font_size}px !important;
-        font-weight: 500;
-        border: 2px solid {st.session_state.theme_color} !important;
-        border-radius: 26px !important;
-        box-shadow: 0 0 15px {st.session_state.theme_color}44;
-    }}
-
-    /* 5. Títulos y tipografía con resplandor neón */
+    /* 7. Tipografía Neón */
     h1, h2, h3 {{
         color: {st.session_state.theme_color} !important;
         text-shadow: 0 0 10px {st.session_state.theme_color}66, 0 0 25px {st.session_state.theme_color}33;
         font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     }}
 
-    /* Ocultar pie de página por defecto de Streamlit */
     footer {{
         visibility: hidden;
     }}
@@ -223,21 +246,21 @@ if menu == "💬 Chat":
         unsafe_allow_html=True
     )
 
-    # Si falta la API Key, dar opción de introducirla directamente
+    # Si falta la API Key, opción de ingresarla en pantalla
     if not connected:
-        st.info("💡 Consejo: Añade tu `GEMINI_API_KEY` en tu archivo `.env` o ingrésala aquí temporalmente:")
+        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o guárdala en Secrets / .env:")
         temp_key = st.text_input("Gemini API Key:", type="password")
         if temp_key:
             try:
                 genai.configure(api_key=temp_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash")
                 connected = True
                 st.success("¡Conectado exitosamente!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al conectar: {e}")
 
-    # Renderizar historial de mensajes
+    # Mostrar historial de mensajes
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
@@ -247,12 +270,10 @@ if menu == "💬 Chat":
     prompt = st.chat_input("Escribe un mensaje en la selva...")
 
     if prompt:
-        # 1. Guardar y mostrar el mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
-        # 2. Generar respuesta con streaming en tiempo real
         with st.chat_message("assistant", avatar="🦍"):
             if connected and model:
                 try:
@@ -267,10 +288,9 @@ if menu == "💬 Chat":
                     full_response = f"⚠️ Error en la jungla: {e}"
                     st.error(full_response)
             else:
-                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY en el archivo `.env` o en Ajustes."
+                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY en los Secrets de Streamlit o en el archivo `.env`."
                 st.warning(full_response)
 
-        # 3. Guardar respuesta en la sesión
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
@@ -281,7 +301,7 @@ elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
     st.subheader("🖼️ Cambiar Fondo de Pantalla")
-    st.caption("Sube aquí cualquier imagen (JPG o PNG). Se aplicará al instante como fondo de pantalla.")
+    st.caption("Sube aquí cualquier foto (JPG o PNG). Se aplicará al instante como fondo.")
     
     nuevo_fondo = st.file_uploader(
         "Subir nueva imagen de fondo",
@@ -290,7 +310,6 @@ elif menu == "📁 Archivos":
     )
 
     if nuevo_fondo:
-        # Guardar como jungle.jpg
         dest_path = ASSETS_DIR / "jungle.jpg"
         with open(dest_path, "wb") as f:
             f.write(nuevo_fondo.getbuffer())
@@ -307,7 +326,6 @@ elif menu == "📁 Archivos":
             f.write(uploaded.getbuffer())
         st.success(f"Archivo guardado: `{uploaded.name}`")
 
-    # Listado de archivos subidos
     archivos_guardados = list(UPLOADS_DIR.glob("*"))
     if archivos_guardados:
         st.write("### 📂 Archivos en el servidor:")
