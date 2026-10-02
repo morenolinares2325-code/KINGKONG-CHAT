@@ -58,14 +58,13 @@ def get_background_css() -> str:
 defaults = {
     "messages": [],              # Chat con IA
     "room_messages": [],         # Chat entre personas
-    "user_name": "Explorador",   # Alias en la sala
+    "user_name": "Explorador",   # Alias en la sala humana
     "theme_color": "#39FF14",    # Verde neón
     "secondary_color": "#00C853",# Verde selva
     "input_color": "#FFFFFF",    # Caja de entrada blanca
     "font_size": 16,
     "radius": 18,
-    "available_models": [],
-    "active_model_name": ""
+    "active_model_name": "gemini-3.8-flash"
 }
 
 for key, val in defaults.items():
@@ -73,8 +72,17 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# CONEXIÓN CON GEMINI (DETECCIÓN AUTOMÁTICA Y SEGURA)
+# LISTA DE MODELOS EXACTA Y CONEXIÓN
 # =================================================
+
+MODELOS_CADENA = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite"
+]
 
 load_dotenv()
 
@@ -89,31 +97,8 @@ connected = False
 if API_KEY:
     try:
         genai.configure(api_key=API_KEY)
-        
-        # Obtenemos los modelos reales compatibles con generateContent
-        if not st.session_state.available_models:
-            real_models = []
-            for m in genai.list_models():
-                if "generateContent" in m.supported_generation_methods:
-                    # Limpiamos el prefijo 'models/'
-                    name = m.name.replace("models/", "")
-                    real_models.append(name)
-            
-            st.session_state.available_models = real_models
-            
-            # Preferencia a modelos rápidos modernos
-            preferidos = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"]
-            for pref in preferidos:
-                if pref in real_models:
-                    st.session_state.active_model_name = pref
-                    break
-            
-            if not st.session_state.active_model_name and real_models:
-                st.session_state.active_model_name = real_models[0]
-
-        if st.session_state.active_model_name:
-            connected = True
-    except Exception as e:
+        connected = True
+    except Exception:
         connected = False
 
 # =================================================
@@ -141,7 +126,7 @@ st.markdown(
         background-color: transparent !important;
     }}
 
-    /* 2. Quitar la barra blanca inferior fija */
+    /* 2. Quitar franja blanca inferior de Streamlit */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -174,24 +159,24 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
-    /* 4. BURBUJAS DE CHAT CON LETRAS BLANCAS BIEN VISIBLES */
+    /* 4. BURBUJAS DE CHAT CON LETRAS 100% BLANCAS */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.75) !important;
+        background: rgba(16, 26, 18, 0.78) !important;
         backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
         border-radius: {st.session_state.radius}px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         margin-bottom: 12px;
     }}
 
-    /* Forzar texto en blanco puro en toda la conversación */
+    /* Fuerza texto blanco puro en todo el contenido de los mensajes */
     [data-testid="stChatMessage"] p, 
     [data-testid="stChatMessage"] span, 
     [data-testid="stChatMessage"] div,
     [data-testid="stChatMessage"] li {{
         color: #FFFFFF !important;
         font-size: {st.session_state.font_size}px !important;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
     }}
 
     /* 5. Barra lateral cristal */
@@ -242,14 +227,14 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Estado de la IA y modelo activo
-    if connected and st.session_state.active_model_name:
+    # Estado de la IA
+    if connected:
         st.success("🟢 IA ONLINE", icon="⚡")
-        st.caption(f"🤖 Modelo activo: `{st.session_state.active_model_name}`")
+        st.caption(f"🤖 Preferido: `{st.session_state.active_model_name}`")
     else:
         st.error("🔴 IA OFFLINE (Revisa API Key)", icon="⚠️")
 
-    # Reloj en vivo continuo vía JS
+    # Reloj en vivo continuo vía JavaScript
     components.html(
         f"""
         <div style="
@@ -280,7 +265,7 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT CON IA
+# PANTALLA: CHAT CON IA (CON CADENA FALLBACK)
 # =================================================
 
 if menu == "💬 Chat con IA":
@@ -294,14 +279,12 @@ if menu == "💬 Chat con IA":
     )
 
     if not connected:
-        st.info("💡 Ingresa tu `GEMINI_API_KEY` o configúrala en los Secrets:")
+        st.info("💡 Ingresa tu `GEMINI_API_KEY` o configúrala en Secrets:")
         temp_key = st.text_input("Gemini API Key:", type="password")
         if temp_key:
             try:
                 genai.configure(api_key=temp_key)
-                st.session_state.available_models = [m.name.replace("models/", "") for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-                if st.session_state.available_models:
-                    st.session_state.active_model_name = st.session_state.available_models[0]
+                connected = True
                 st.success("¡Conectado exitosamente!")
                 st.rerun()
             except Exception as e:
@@ -317,25 +300,47 @@ if menu == "💬 Chat con IA":
     prompt = st.chat_input("Escribe un mensaje a la IA...")
 
     if prompt:
+        # 1. Guardar y mostrar el mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
+        # 2. Generar respuesta probando la cadena de modelos
         with st.chat_message("assistant", avatar="🦍"):
-            if connected and st.session_state.active_model_name:
-                with st.spinner("Pensando en la selva... 🦍"):
-                    try:
-                        active_model = genai.GenerativeModel(st.session_state.active_model_name)
-                        response = active_model.generate_content(prompt)
-                        full_response = response.text
-                        st.markdown(full_response)
-                    except Exception as e:
-                        full_response = f"⚠️ Error en la respuesta: {e}"
-                        st.error(full_response)
+            full_response = ""
+            modelo_exitoso = None
+
+            if connected:
+                # Ordenamos empezando por el preferido, seguido del resto
+                modelos_a_probar = [st.session_state.active_model_name] + [
+                    m for m in MODELOS_CADENA if m != st.session_state.active_model_name
+                ]
+
+                with st.spinner("Conectando con la selva... 🦍"):
+                    for candidate_name in modelos_a_probar:
+                        try:
+                            m_instance = genai.GenerativeModel(candidate_name)
+                            res = m_instance.generate_content(prompt)
+                            if res and res.text:
+                                full_response = res.text
+                                modelo_exitoso = candidate_name
+                                st.session_state.active_model_name = candidate_name
+                                break
+                        except Exception:
+                            # Pasa al siguiente modelo sin congelar la app
+                            continue
+
+                if full_response:
+                    st.markdown(full_response)
+                    st.caption(f"⚡ *Respuesta generada por `{modelo_exitoso}`*")
+                else:
+                    full_response = "⚠️ No se pudo obtener respuesta con los modelos configurados. Comprueba tu conexión o API Key."
+                    st.error(full_response)
             else:
-                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY."
+                full_response = "⚠️️ La IA no está conectada. Configura tu GEMINI_API_KEY."
                 st.warning(full_response)
 
+        # 3. Guardar en el historial
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
@@ -477,13 +482,12 @@ else:
             st.session_state.radius
         )
 
-        if st.session_state.available_models:
-            st.subheader("🤖 Modelo de Gemini")
-            st.session_state.active_model_name = st.selectbox(
-                "Seleccionar modelo activo:",
-                st.session_state.available_models,
-                index=st.session_state.available_models.index(st.session_state.active_model_name) if st.session_state.active_model_name in st.session_state.available_models else 0
-            )
+        st.subheader("🤖 Modelo Preferido")
+        st.session_state.active_model_name = st.selectbox(
+            "Seleccionar modelo prioritario:",
+            MODELOS_CADENA,
+            index=MODELOS_CADENA.index(st.session_state.active_model_name) if st.session_state.active_model_name in MODELOS_CADENA else 0
+        )
 
     st.markdown("---")
     
