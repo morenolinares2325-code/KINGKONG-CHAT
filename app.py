@@ -40,7 +40,6 @@ def get_background_css() -> str:
             return f'url("data:image/{mime};base64,{b64}")'
     return ""
 
-# Conexión directa a Groq
 GROQ_KEY = (
     os.getenv("GROQ_API_KEY")
     or (st.secrets.get("GROQ_API_KEY") if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets else None)
@@ -118,44 +117,44 @@ st.markdown(
 # =================================================
 # SIDEBAR
 # =================================================
-with st.sidebar:
-    st.markdown(
-        f"""
-        <div style="text-align: center; margin-top: -15px;">
-            <span style="font-size: 64px;">🦍</span>
-            <h2 style="margin: 0; font-size: 24px;">KINGKONG CHAT</h2>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown("---")
-    menu = st.radio("Navegación", ["💬 KingKong Chat", "👥 Sala de Conversación", "📁 Archivos", "⚙️ Ajustes"], label_visibility="collapsed")
-    st.markdown("---")
-    st.success("🟢 SISTEMA CONECTADO", icon="⚡")
+sidebar = st.sidebar
+sidebar.markdown(
+    """
+    <div style="text-align: center; margin-top: -15px;">
+        <span style="font-size: 64px;">🦍</span>
+        <h2 style="margin: 0; font-size: 24px;">KINGKONG CHAT</h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+sidebar.markdown("---")
+menu = sidebar.radio("Navegación", ["💬 KingKong Chat", "👥 Sala de Conversación", "📁 Archivos", "⚙️ Ajustes"], label_visibility="collapsed")
+sidebar.markdown("---")
+sidebar.success("🟢 SISTEMA CONECTADO", icon="⚡")
 
-    components.html(
-        f"""
-        <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 10px; font-family: sans-serif;">
-            <div style="color: #aaa; font-size: 10px;">TIEMPO EN VIVO</div>
-            <div id="live_clock" style="font-size: 22px; font-weight: bold; color: {st.session_state.theme_color};">00:00:00</div>
-        </div>
-        <script>
-            function updateClock() {{
-                const now = new Date();
-                const h = String(now.getHours()).padStart(2, '0');
-                const m = String(now.getMinutes()).padStart(2, '0');
-                const s = String(now.getSeconds()).padStart(2, '0');
-                document.getElementById('live_clock').innerText = h + ':' + m + ':' + s;
-            }}
-            updateClock();
-            setInterval(updateClock, 1000);
-        </script>
-        """,
-        height=80
-    )
+components.html(
+    f"""
+    <div style="text-align: center; padding: 8px; background: rgba(0,0,0,0.4); border-radius: 10px; font-family: sans-serif;">
+        <div style="color: #aaa; font-size: 10px;">TIEMPO EN VIVO</div>
+        <div id="live_clock" style="font-size: 22px; font-weight: bold; color: {st.session_state.theme_color};">00:00:00</div>
+    </div>
+    <script>
+        function updateClock() {{
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('live_clock').innerText = h + ':' + m + ':' + s;
+        }}
+        updateClock();
+        setInterval(updateClock, 1000);
+    </script>
+    """,
+    height=80
+)
 
 # =================================================
-# CHAT PRINCIPAL (GROQ DIRECTO)
+# CHAT PRINCIPAL
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -163,33 +162,32 @@ if menu == "💬 KingKong Chat":
 
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
-        with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
+        chat_box = st.chat_message(msg["role"], avatar=avatar)
+        chat_box.markdown(msg["content"])
 
     prompt = st.chat_input("Escribe un mensaje a KingKong...")
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(prompt)
+        user_box = st.chat_message("user", avatar="👤")
+        user_box.markdown(prompt)
 
-        with st.chat_message("assistant", avatar="🦍"):
-            historial = [{"role": "system", "content": "Eres KingKong, un asistente conciso, ágil y directo."}]
-            for m in st.session_state.messages:
-                historial.append({"role": m["role"], "content": m["content"]})
+        asst_box = st.chat_message("assistant", avatar="🦍")
+        historial = [{"role": "system", "content": "Eres KingKong, un asistente conciso, ágil y directo."}]
+        for m in st.session_state.messages:
+            historial.append({"role": m["role"], "content": m["content"]})
 
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=historial,
-                stream=True
-            )
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=historial,
+            stream=True
+        )
 
-            def stream_gen():
-                for chunk in response:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        yield chunk.choices[0].delta.content
+        def stream_gen():
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
 
-            full_text = st.write_stream(stream_gen())
-
+        full_text = asst_box.write_stream(stream_gen())
         st.session_state.messages.append({"role": "assistant", "content": full_text})
 
 # =================================================
@@ -200,45 +198,42 @@ elif menu == "👥 Sala de Conversación":
     st.markdown("<h1 style='text-align:center;'>👥 SALA DE CONVERSACIÓN</h1>", unsafe_allow_html=True)
 
     for msg in st.session_state.room_messages:
-        with st.chat_message("user", avatar="💬"):
-            st.markdown(f"{msg['user']} <small>({msg['time']})</small>", unsafe_allow_html=True)
-            if msg.get("text"):
-                st.markdown(msg["text"])
-            if msg.get("file_name"):
-                if msg.get("is_image"):
-                    st.image(msg["file_path"], caption=msg["file_name"], width=300)
-                else:
-                    st.markdown(f"📎 {msg['file_name']}")
+        room_box = st.chat_message("user", avatar="💬")
+        room_box.markdown(f"{msg['user']} <small>({msg['time']})</small>", unsafe_allow_html=True)
+        if msg.get("text"):
+            room_box.markdown(msg["text"])
+        if msg.get("file_name"):
+            if msg.get("is_image"):
+                room_box.image(msg["file_path"], caption=msg["file_name"], width=300)
+            else:
+                room_box.markdown(f"📎 {msg['file_name']}")
 
-    with st.form("form_sala", clear_on_submit=True):
-c1, c2 = st.columns([1, 3])
-        with c1:
-            u_name = st.text_input("Alias:", value=st.session_state.user_name)
-        with c2:
-            t_msg = st.text_input("Mensaje:", placeholder="Escribe aquí...")
-        up_file = st.file_uploader("Adjuntar archivo/imagen:", key="file_sala")
-        submit = st.form_submit_button("📤 Enviar", use_container_width=True)
-
-        if submit and (t_msg or up_file):
-            st.session_state.user_name = u_name
-            ahora = datetime.now().strftime("%H:%M")
-            nuevo = {
-                "user": u_name,
-                "time": ahora,
-                "text": t_msg if t_msg else "",
-                "file_name": None,
-                "file_path": None,
-                "is_image": False
-            }
-            if up_file:
-                path = UPLOADS_DIR / up_file.name
-                with open(path, "wb") as f:
-                    f.write(up_file.getbuffer())
-                nuevo["file_name"] = up_file.name
-                nuevo["file_path"] = str(path)
-                nuevo["is_image"] = up_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-            st.session_state.room_messages.append(nuevo)
-            st.rerun()
+    # Controles directos sin bloques with anidados
+    c1, c2 = st.columns([1, 3])
+    u_name = c1.text_input("Alias:", value=st.session_state.user_name)
+    t_msg = c2.text_input("Mensaje:", placeholder="Escribe aquí...", key="input_sala_txt")
+    up_file = st.file_uploader("Adjuntar archivo/imagen:", key="file_sala_upload")
+    submit = st.button("📤 Enviar a la sala", use_container_width=True)
+if submit and (t_msg or up_file):
+        st.session_state.user_name = u_name
+        ahora = datetime.now().strftime("%H:%M")
+        nuevo = {
+            "user": u_name,
+            "time": ahora,
+            "text": t_msg if t_msg else "",
+            "file_name": None,
+            "file_path": None,
+            "is_image": False
+        }
+        if up_file:
+            path = UPLOADS_DIR / up_file.name
+            with open(path, "wb") as f:
+                f.write(up_file.getbuffer())
+            nuevo["file_name"] = up_file.name
+            nuevo["file_path"] = str(path)
+            nuevo["is_image"] = up_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        st.session_state.room_messages.append(nuevo)
+        st.rerun()
 
 # =================================================
 # GESTOR DE ARCHIVOS
@@ -262,7 +257,7 @@ elif menu == "📁 Archivos":
 # =================================================
 
 else:
-    st.title("⚙️ Ajustes")
+    st.title("⚙️️ Ajustes")
     st.session_state.theme_color = st.color_picker("Color Neón", st.session_state.theme_color)
     st.session_state.font_size = st.slider("Tamaño de Fuente", 12, 24, st.session_state.font_size)
     st.session_state.radius = st.slider("Curvatura Burbujas", 0, 30, st.session_state.radius)
