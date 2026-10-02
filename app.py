@@ -57,15 +57,15 @@ def get_background_css() -> str:
 
 defaults = {
     "messages": [],              # Chat con IA
-    "room_messages": [],         # Chat entre personas (Sin IA)
-    "user_name": "Explorador",   # Nombre del usuario en la sala
+    "room_messages": [],         # Chat entre personas
+    "user_name": "Explorador",   # Alias en la sala
     "theme_color": "#39FF14",    # Verde neón
     "secondary_color": "#00C853",# Verde selva
-    "input_color": "#FFFFFF",    # Entrada blanca estilo Telegram
+    "input_color": "#FFFFFF",    # Caja de entrada blanca
     "font_size": 16,
     "radius": 18,
-    "chat_width": 1000,
-    "active_model_name": "Ninguno"
+    "available_models": [],
+    "active_model_name": ""
 }
 
 for key, val in defaults.items():
@@ -73,7 +73,7 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# CONEXIÓN CON GEMINI (FALLBACK DE MODELOS)
+# CONEXIÓN CON GEMINI (DETECCIÓN AUTOMÁTICA Y SEGURA)
 # =================================================
 
 load_dotenv()
@@ -85,39 +85,39 @@ elif os.getenv("GEMINI_API_KEY"):
     API_KEY = os.getenv("GEMINI_API_KEY")
 
 connected = False
-model = None
-
-MODELOS_CANDIDATOS = [
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite"
-]
 
 if API_KEY:
     try:
         genai.configure(api_key=API_KEY)
-        for m_name in MODELOS_CANDIDATOS:
-            try:
-                candidate = genai.GenerativeModel(m_name)
-                model = candidate
-                st.session_state.active_model_name = m_name
-                connected = True
-                break
-            except Exception:
-                continue
+        
+        # Obtenemos los modelos reales compatibles con generateContent
+        if not st.session_state.available_models:
+            real_models = []
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    # Limpiamos el prefijo 'models/'
+                    name = m.name.replace("models/", "")
+                    real_models.append(name)
+            
+            st.session_state.available_models = real_models
+            
+            # Preferencia a modelos rápidos modernos
+            preferidos = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
+            for pref in preferidos:
+                if pref in real_models:
+                    st.session_state.active_model_name = pref
+                    break
+            
+            if not st.session_state.active_model_name and real_models:
+                st.session_state.active_model_name = real_models[0]
 
-        if not model:
-            model = genai.GenerativeModel("gemini-3.8-flash")
-            st.session_state.active_model_name = "gemini-3.8-flash"
+        if st.session_state.active_model_name:
             connected = True
-    except Exception:
+    except Exception as e:
         connected = False
 
 # =================================================
-# ESTILOS CSS AVANZADOS (SIN FRANJA BLANCA)
+# ESTILOS CSS (LETRAS BLANCAS Y CERO FRANJA BLANCA)
 # =================================================
 
 bg_css = get_background_css()
@@ -125,7 +125,7 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* 1. Fondo global oscuro de jungla */
+    /* 1. Fondo global oscuro continuo */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(0, 0, 0, 0.78), rgba(4, 12, 6, 0.88)),
@@ -141,7 +141,7 @@ st.markdown(
         background-color: transparent !important;
     }}
 
-    /* 2. Eliminar la franja blanca inferior de Streamlit */
+    /* 2. Quitar la barra blanca inferior fija */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -158,7 +158,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
-    /* 3. Únicamente la caja de texto blanca estilo Telegram */
+    /* 3. CAJA DE TEXTO BLANCA */
     .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
@@ -174,25 +174,31 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
-    /* 4. Barra lateral con efecto cristal */
-    section[data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
-        backdrop-filter: blur(15px);
-        border-right: 2px solid {st.session_state.theme_color}55;
-    }}
-
-    /* 5. Burbujas de mensajes */
+    /* 4. BURBUJAS DE CHAT CON LETRAS BLANCAS BIEN VISIBLES */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.70) !important;
+        background: rgba(16, 26, 18, 0.75) !important;
         backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
         border-radius: {st.session_state.radius}px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         margin-bottom: 12px;
     }}
 
-    [data-testid="stChatMessage"]:hover {{
-        border-color: {st.session_state.theme_color}66;
+    /* Forzar texto en blanco puro en toda la conversación */
+    [data-testid="stChatMessage"] p, 
+    [data-testid="stChatMessage"] span, 
+    [data-testid="stChatMessage"] div,
+    [data-testid="stChatMessage"] li {{
+        color: #FFFFFF !important;
+        font-size: {st.session_state.font_size}px !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }}
+
+    /* 5. Barra lateral cristal */
+    section[data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
+        backdrop-filter: blur(15px);
+        border-right: 2px solid {st.session_state.theme_color}55;
     }}
 
     /* 6. Tipografía Neón */
@@ -236,14 +242,14 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Estado de la IA
-    if connected:
+    # Estado de la IA y modelo activo
+    if connected and st.session_state.active_model_name:
         st.success("🟢 IA ONLINE", icon="⚡")
-        st.caption(f"🤖 Modelo: `{st.session_state.active_model_name}`")
+        st.caption(f"🤖 Modelo activo: `{st.session_state.active_model_name}`")
     else:
         st.error("🔴 IA OFFLINE (Revisa API Key)", icon="⚠️")
 
-    # Reloj en tiempo real continuo vía HTML / JS
+    # Reloj en vivo continuo vía JS
     components.html(
         f"""
         <div style="
@@ -288,24 +294,26 @@ if menu == "💬 Chat con IA":
     )
 
     if not connected:
-        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o configúrala en Secrets / .env:")
+        st.info("💡 Ingresa tu `GEMINI_API_KEY` o configúrala en los Secrets:")
         temp_key = st.text_input("Gemini API Key:", type="password")
         if temp_key:
             try:
                 genai.configure(api_key=temp_key)
-                model = genai.GenerativeModel("gemini-3.8-flash")
-                st.session_state.active_model_name = "gemini-3.8-flash"
-                connected = True
+                st.session_state.available_models = [m.name.replace("models/", "") for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+                if st.session_state.available_models:
+                    st.session_state.active_model_name = st.session_state.available_models[0]
                 st.success("¡Conectado exitosamente!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al conectar: {e}")
 
+    # Mostrar historial de mensajes
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
+    # Entrada de mensaje
     prompt = st.chat_input("Escribe un mensaje a la IA...")
 
     if prompt:
@@ -314,26 +322,16 @@ if menu == "💬 Chat con IA":
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            if connected and model:
-                full_response = ""
-                for m_candidate in [st.session_state.active_model_name] + MODELOS_CANDIDATOS:
+            if connected and st.session_state.active_model_name:
+                with st.spinner("Pensando en la selva... 🦍"):
                     try:
-                        active_m = genai.GenerativeModel(m_candidate)
-                        response = active_m.generate_content(prompt, stream=True)
-                        
-                        def stream_generator():
-                            for chunk in response:
-                                yield chunk.text
-
-                        full_response = st.write_stream(stream_generator())
-                        st.session_state.active_model_name = m_candidate
-                        break
-                    except Exception:
-                        continue
-                
-                if not full_response:
-                    full_response = "⚠️ No se pudo obtener respuesta con los modelos configurados."
-                    st.error(full_response)
+                        active_model = genai.GenerativeModel(st.session_state.active_model_name)
+                        response = active_model.generate_content(prompt)
+                        full_response = response.text
+                        st.markdown(full_response)
+                    except Exception as e:
+                        full_response = f"⚠️ Error en la respuesta: {e}"
+                        st.error(full_response)
             else:
                 full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY."
                 st.warning(full_response)
@@ -351,13 +349,12 @@ elif menu == "👥 Sala de Chat (Sin IA)":
         👥 SALA DE CONVERSACIÓN
         </h1>
         <p style="text-align:center; opacity: 0.7; font-size: 14px; margin-bottom: 25px;">
-        Chat directo entre personas: comparte textos, fotos y documentos sin IA.
+        Chat directo: comparte mensajes, imágenes y archivos sin intervención de la IA.
         </p>
         """,
         unsafe_allow_html=True
     )
 
-    # Panel superior de usuario y adjuntos
     with st.expander("👤 Configurar tu Nombre y Adjuntar Archivos", expanded=False):
         col_u, col_f = st.columns([1, 2])
         with col_u:
@@ -365,7 +362,6 @@ elif menu == "👥 Sala de Chat (Sin IA)":
         with col_f:
             archivo_compartido = st.file_uploader("Adjuntar archivo o imagen:", key="uploader_sala")
 
-    # Mostrar mensajes de la sala
     for msg in st.session_state.room_messages:
         with st.chat_message("user", avatar="💬"):
             st.markdown(f"**{msg['user']}** <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
@@ -377,10 +373,8 @@ elif menu == "👥 Sala de Chat (Sin IA)":
                 else:
                     st.markdown(f"📎 **Archivo adjunto:** `{msg['file_name']}`")
 
-    # Entrada de texto para la sala
     mensaje_sala = st.chat_input("Escribe en la sala para todos...")
 
-    # Enviar mensaje con texto o con archivo pendiente
     if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la Sala")):
         hora_actual = datetime.now().strftime("%H:%M")
         nuevo_mensaje = {
@@ -392,7 +386,6 @@ elif menu == "👥 Sala de Chat (Sin IA)":
             "is_image": False
         }
 
-        # Procesar archivo adjunto si lo hay
         if archivo_compartido:
             ruta_guardada = UPLOADS_DIR / archivo_compartido.name
             with open(ruta_guardada, "wb") as f:
@@ -473,7 +466,7 @@ else:
     with col2:
         st.subheader("📐 Dimensiones y Formato")
         st.session_state.font_size = st.slider(
-            "Tamaño de Texto en Input (px)",
+            "Tamaño de Texto en Chat (px)",
             12, 26,
             st.session_state.font_size
         )
@@ -483,6 +476,14 @@ else:
             0, 35,
             st.session_state.radius
         )
+
+        if st.session_state.available_models:
+            st.subheader("🤖 Modelo de Gemini")
+            st.session_state.active_model_name = st.selectbox(
+                "Seleccionar modelo activo:",
+                st.session_state.available_models,
+                index=st.session_state.available_models.index(st.session_state.active_model_name) if st.session_state.active_model_name in st.session_state.available_models else 0
+            )
 
     st.markdown("---")
     
