@@ -1,6 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import concurrent.futures
 from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime
@@ -8,19 +7,30 @@ import os
 import base64
 
 # =================================================
-# COMPATIBILIDAD CON SDK DE GOOGLE
+# COMPATIBILIDAD CON LIBRERÍAS DE IA
 # =================================================
 
-USE_NEW_SDK = False
+# 1. Groq (Ultra-rápido)
+HAS_GROQ = False
+try:
+    from groq import Groq
+    HAS_GROQ = True
+except ImportError:
+    HAS_GROQ = False
+
+# 2. Gemini
+HAS_GEMINI = False
 try:
     from google import genai
-    USE_NEW_SDK = True
+    HAS_GEMINI = True
+    USE_NEW_GEMINI = True
 except ImportError:
     try:
         import google.generativeai as genai_legacy
-        USE_NEW_SDK = False
+        HAS_GEMINI = True
+        USE_NEW_GEMINI = False
     except ImportError:
-        pass
+        HAS_GEMINI = False
 
 # =================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -60,15 +70,6 @@ def get_background_css() -> str:
 # ESTADOS DE SESIÓN (SESSION STATE)
 # =================================================
 
-# Prioridad absoluta a los modelos 3.5 a 3.1 y versiones Lite
-MODELOS_RAPIDOS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash"
-]
-
 defaults = {
     "messages": [],
     "room_messages": [],
@@ -78,47 +79,45 @@ defaults = {
     "input_color": "#FFFFFF",
     "font_size": 16,
     "radius": 18,
-    "active_model_name": "gemini-3.5-flash-lite"
+    "ai_engine": "Groq (Ultra-Rápido)",
+    "groq_model": "llama-3.3-70b-versatile"
 }
 
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
+# Modelos recomendados para Groq
+MODELOS_GROQ = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
+]
+
 # =================================================
-# CONEXIÓN CON API KEY
+# CARGA DE API KEYS
 # =================================================
 
 load_dotenv()
 
-API_KEY = None
+# Groq Key
+GROQ_KEY = None
+if "GROQ_API_KEY" in st.secrets:
+    GROQ_KEY = st.secrets["GROQ_API_KEY"]
+elif os.getenv("GROQ_API_KEY"):
+    GROQ_KEY = os.getenv("GROQ_API_KEY")
+
+# Gemini Key
+GEMINI_KEY = None
 if "GEMINI_API_KEY" in st.secrets:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
+    GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
 elif os.getenv("GEMINI_API_KEY"):
-    API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-connected = bool(API_KEY)
-
-def ejecutar_consulta_rapida(prompt_text: str, model_name: str, key: str, timeout_seg: int = 3) -> str:
-    """Ejecuta la llamada con un timeout muy corto para no demorar."""
-    def _call():
-        if USE_NEW_SDK:
-            client = genai.Client(api_key=key)
-            res = client.models.generate_content(
-                model=model_name,
-                contents=prompt_text
-            )
-            return res.text
-        else:
-            import google.generativeai as legacy
-            legacy.configure(api_key=key)
-            m = legacy.GenerativeModel(model_name)
-            res = m.generate_content(prompt_text)
-            return res.text
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_call)
-        return future.result(timeout=timeout_seg)
+groq_connected = bool(GROQ_KEY and HAS_GROQ)
+gemini_connected = bool(GEMINI_KEY and HAS_GEMINI)
 
 # =================================================
 # ESTILOS CSS (LETRAS BLANCAS Y CERO FRANJA BLANCA)
@@ -129,7 +128,7 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* Fondo continuo */
+    /* 1. Fondo global oscuro continuo */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(0, 0, 0, 0.78), rgba(4, 12, 6, 0.88)),
@@ -145,7 +144,7 @@ st.markdown(
         background-color: transparent !important;
     }}
 
-    /* Eliminar barra inferior blanca */
+    /* 2. Quitar barra blanca inferior de Streamlit */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -162,7 +161,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
-    /* Entrada de texto blanca */
+    /* 3. Píldora de texto blanca */
     .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
@@ -178,7 +177,7 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
-    /* Letras 100% blancas en la conversación */
+    /* 4. Letras 100% blancas en la conversación */
     [data-testid="stChatMessage"] {{
         background: rgba(16, 26, 18, 0.82) !important;
         backdrop-filter: blur(14px);
@@ -197,7 +196,7 @@ st.markdown(
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
     }}
 
-    /* Sidebar translúcido */
+    /* 5. Barra lateral */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
@@ -244,11 +243,24 @@ with st.sidebar:
 
     st.markdown("---")
 
-    if connected:
-        st.success("🟢 IA ONLINE", icon="⚡")
-        st.caption(f"⚡ Motor: `{st.session_state.active_model_name}`")
+    # Selector de motor
+    st.session_state.ai_engine = st.selectbox(
+        "Motor de Inteligencia:",
+        ["Groq (Ultra-Rápido)", "Google Gemini"],
+        index=0 if "Groq" in st.session_state.ai_engine else 1
+    )
+
+    if "Groq" in st.session_state.ai_engine:
+        if groq_connected:
+            st.success("🟢 GROQ ONLINE", icon="⚡")
+            st.caption(f"🚀 Modelo: `{st.session_state.groq_model}`")
+        else:
+            st.error("🔴 GROQ OFFLINE", icon="⚠️")
     else:
-        st.error("🔴 IA OFFLINE (Revisa API Key)", icon="⚠️")
+        if gemini_connected:
+            st.success("🟢 GEMINI ONLINE", icon="⚡")
+        else:
+            st.error("🔴 GEMINI OFFLINE", icon="⚠️")
 
     # Reloj en vivo continuo
     components.html(
@@ -281,71 +293,98 @@ with st.sidebar:
     )
 
 # =================================================
-# PANTALLA: CHAT CON IA (RESPUESTAS ULTRA-RÁPIDAS)
+# PANTALLA: CHAT CON IA (STREAMING ULTRA-VELOZ)
 # =================================================
 
 if menu == "💬 Chat con IA":
     st.markdown(
         f"""
         <h1 style="text-align:center; font-size: 42px; margin-bottom: 20px;">
-        🦍 KINGKONG CHAT (IA)
+        🦍 KINGKONG CHAT
         </h1>
         """,
         unsafe_allow_html=True
     )
 
-    if not connected:
-        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal:")
-        temp_key = st.text_input("Gemini API Key:", type="password")
-        if temp_key:
-            API_KEY = temp_key
-            connected = True
+    # Si falta la clave de Groq, permitir ponerla aquí
+    if "Groq" in st.session_state.ai_engine and not groq_connected:
+        st.info("💡 Ingresa tu `GROQ_API_KEY` temporal o guárdala en Secrets / .env:")
+        temp_groq = st.text_input("Groq API Key (comienza por gsk_):", type="password")
+        if temp_groq:
+            GROQ_KEY = temp_groq
+            groq_connected = True
             st.rerun()
 
+    # Mostrar historial
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    prompt = st.chat_input("Escribe un mensaje a la IA...")
+    prompt = st.chat_input("Escribe un mensaje a KingKong...")
 
     if prompt:
-        # Guardar y mostrar mensaje del usuario
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
             full_response = ""
-            modelo_exitoso = None
 
-            if connected and API_KEY:
-                # El modelo activo va primero para contestar sin retrasos
-                cola_modelos = [st.session_state.active_model_name] + [
-                    m for m in MODELOS_RAPIDOS if m != st.session_state.active_model_name
-                ]
+            # --- RESPUESTA CON GROQ (INSTANTÁNEA CON STREAMING) ---
+            if "Groq" in st.session_state.ai_engine:
+                if groq_connected and GROQ_KEY:
+                    try:
+                        client_groq = Groq(api_key=GROQ_KEY)
+                        # Preparamos el historial para contexto conversacional
+                        mensajes_api = [
+                            {"role": "system", "content": "Eres KingKong AI, un asistente inteligente, directo, astuto y servicial en un entorno selvático y tecnológico."}
+                        ]
+                        for m in st.session_state.messages:
+                            mensajes_api.append({"role": m["role"], "content": m["content"]})
 
-                with st.spinner("🦍 Respondiendo..."):
-                    for candidate in cola_modelos:
-                        try:
-                            # 3 segundos máximo por intento; pasa de inmediato al siguiente
-                            full_response = ejecutar_consulta_rapida(prompt, candidate, API_KEY, timeout_seg=3)
-                            if full_response:
-                                modelo_exitoso = candidate
-                                st.session_state.active_model_name = candidate  # Fijar el que funcionó
-                                break
-                        except Exception:
-                            continue
+                        stream = client_groq.chat.completions.create(
+                            model=st.session_state.groq_model,
+                            messages=mensajes_api,
+                            stream=True
+                        )
 
-                if full_response:
-                    st.markdown(full_response)
-                    st.caption(f"⚡ *Modelo: `{modelo_exitoso}`*")
+                        def generar_groq():
+                            for chunk in stream:
+                                if chunk.choices and chunk.choices[0].delta.content:
+                                    yield chunk.choices[0].delta.content
+
+                        full_response = st.write_stream(generar_groq())
+                        st.caption(f"⚡ *Groq LPU Engine: `{st.session_state.groq_model}`*")
+                    except Exception as e:
+                        full_response = f"⚠️ Error en Groq: {e}"
+                        st.error(full_response)
                 else:
-                    full_response = "⚠️ No hubo respuesta rápida. Intenta enviar de nuevo."
-                    st.error(full_response)
+                    full_response = "⚠️ Falta configurar tu GROQ_API_KEY."
+                    st.warning(full_response)
+
+            # --- RESPUESTA CON GEMINI (ALTERNATIVA) ---
             else:
-                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY."
-                st.warning(full_response)
+                if gemini_connected and GEMINI_KEY:
+                    try:
+                        import google.generativeai as legacy
+                        legacy.configure(api_key=GEMINI_KEY)
+                        m = legacy.GenerativeModel("gemini-3.5-flash-lite")
+                        response = m.generate_content(prompt, stream=True)
+                        
+                        def generar_gemini():
+                            for chunk in response:
+                                if chunk.text:
+                                    yield chunk.text
+
+                        full_response = st.write_stream(generar_gemini())
+                        st.caption("⚡ *Gemini 3.5 Flash-Lite Engine*")
+                    except Exception as e:
+                        full_response = f"⚠️ Error en Gemini: {e}"
+                        st.error(full_response)
+                else:
+                    full_response = "⚠️ Falta configurar tu GEMINI_API_KEY."
+                    st.warning(full_response)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
@@ -459,11 +498,11 @@ else:
         st.session_state.font_size = st.slider("Tamaño de Texto en Chat (px)", 12, 26, st.session_state.font_size)
         st.session_state.radius = st.slider("Curvatura de Bordes (px)", 0, 35, st.session_state.radius)
         
-        st.subheader("🤖 Modelo Prioritario")
-        st.session_state.active_model_name = st.selectbox(
-            "Seleccionar modelo preferente:",
-            MODELOS_RAPIDOS,
-            index=MODELOS_RAPIDOS.index(st.session_state.active_model_name) if st.session_state.active_model_name in MODELOS_RAPIDOS else 0
+        st.subheader("🚀 Modelo de Groq")
+        st.session_state.groq_model = st.selectbox(
+            "Seleccionar modelo de Groq:",
+            MODELOS_GROQ,
+            index=MODELOS_GROQ.index(st.session_state.groq_model) if st.session_state.groq_model in MODELOS_GROQ else 0
         )
 
     st.markdown("---")
@@ -480,4 +519,3 @@ else:
             st.session_state.room_messages = []
             st.success("Historial de la sala eliminado.")
             st.rerun()
-
