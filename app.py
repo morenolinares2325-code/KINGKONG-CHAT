@@ -1,12 +1,69 @@
 import streamlit as st
 import google.generativeai as genai
 from dotenv import load_dotenv
-import os
 from pathlib import Path
+import os
 
-# =====================================================
-# CONFIGURACION
-# =====================================================
+# ====================================================
+# TEMAS
+# ====================================================
+
+def get_theme(theme_name):
+
+    themes = {
+
+        "🦍 Jungle Neon": {
+            "primary": "#39FF14",
+            "secondary": "#00C853",
+            "background": "#050505",
+            "sidebar": "#111111",
+            "card": "#181818",
+            "text": "#FFFFFF"
+        },
+
+        "💚 Matrix": {
+            "primary": "#00FF00",
+            "secondary": "#00CC00",
+            "background": "#000000",
+            "sidebar": "#050505",
+            "card": "#101010",
+            "text": "#E5FFE5"
+        },
+
+        "💙 Ocean Cyber": {
+            "primary": "#00E5FF",
+            "secondary": "#0099FF",
+            "background": "#06131B",
+            "sidebar": "#0D1F2D",
+            "card": "#11293B",
+            "text": "#FFFFFF"
+        },
+
+        "🟣 Ultra Violet": {
+            "primary": "#C77DFF",
+            "secondary": "#9D4EDD",
+            "background": "#10002B",
+            "sidebar": "#240046",
+            "card": "#3C096C",
+            "text": "#FFFFFF"
+        },
+
+        "❤️ Lava Red": {
+            "primary": "#FF3D3D",
+            "secondary": "#FF6B6B",
+            "background": "#120000",
+            "sidebar": "#1E0000",
+            "card": "#2D0B0B",
+            "text": "#FFFFFF"
+        }
+    }
+
+    return themes[theme_name]
+
+
+# ====================================================
+# CONFIG
+# ====================================================
 
 load_dotenv()
 
@@ -20,22 +77,25 @@ model = genai.GenerativeModel(
 
 Path("uploads").mkdir(exist_ok=True)
 
-# =====================================================
-# CONFIG INICIAL
-# =====================================================
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "main_color" not in st.session_state:
-    st.session_state.main_color = "#39FF14"
+if "theme" not in st.session_state:
+    st.session_state.theme = "🦍 Jungle Neon"
 
 if "chat_width" not in st.session_state:
     st.session_state.chat_width = "1200px"
 
-# =====================================================
-# PAGINA
-# =====================================================
+theme = get_theme(
+    st.session_state.theme
+)
+
+PRIMARY = theme["primary"]
+SECONDARY = theme["secondary"]
+BACKGROUND = theme["background"]
+SIDEBAR = theme["sidebar"]
+CARD = theme["card"]
+TEXT = theme["text"]
 
 st.set_page_config(
     page_title="KINGKONG CHAT",
@@ -43,28 +103,28 @@ st.set_page_config(
     layout="wide"
 )
 
-MAIN_COLOR = st.session_state.main_color
-
-# =====================================================
-# CSS KINGKONG
-# =====================================================
+# ====================================================
+# CSS GLOBAL
+# ====================================================
 
 st.markdown(f"""
 <style>
 
 .stApp {{
-    background-color:#050505;
-    color:white;
+    background-color:{BACKGROUND};
+    color:{TEXT};
 }}
 
 section[data-testid="stSidebar"] {{
-    background-color:#101010;
-    border-right:2px solid {MAIN_COLOR};
+    background-color:{SIDEBAR};
+    border-right:2px solid {PRIMARY};
 }}
 
 h1,h2,h3 {{
-    color:{MAIN_COLOR};
-    text-shadow:0 0 10px {MAIN_COLOR};
+    color:{PRIMARY};
+    text-shadow:
+        0 0 5px {PRIMARY},
+        0 0 15px {PRIMARY};
 }}
 
 .block-container {{
@@ -72,44 +132,38 @@ h1,h2,h3 {{
 }}
 
 [data-testid="stChatMessage"] {{
-    background-color:#181818;
-    border:1px solid #2a2a2a;
+    background-color:{CARD};
+    border:1px solid {SECONDARY};
     border-radius:15px;
-    padding:14px;
 }}
 
 .stChatInput input {{
-    background:#151515 !important;
-    color:white !important;
-    border:1px solid {MAIN_COLOR} !important;
+    background:{CARD} !important;
+    color:{TEXT} !important;
+    border:1px solid {PRIMARY} !important;
 }}
 
 .stButton button {{
-    background:{MAIN_COLOR};
+    background:{PRIMARY};
     color:black;
-    border:none;
-    border-radius:10px;
     font-weight:bold;
-}}
-
-div[data-testid="stFileUploader"] {{
-    background:#181818;
     border-radius:12px;
-    padding:10px;
 }}
 
 .neon {{
-    color:{MAIN_COLOR};
-    font-weight:bold;
-    text-shadow:0px 0px 10px {MAIN_COLOR};
+    color:{PRIMARY};
+    text-shadow:
+        0px 0px 10px {PRIMARY},
+        0px 0px 20px {PRIMARY};
 }}
 
 </style>
 """, unsafe_allow_html=True)
 
-# =====================================================
+
+# ====================================================
 # SIDEBAR
-# =====================================================
+# ====================================================
 
 with st.sidebar:
 
@@ -133,18 +187,13 @@ with st.sidebar:
     st.markdown("---")
 
     st.success("🟢 Gemini Online")
-
-# =====================================================
-# CHAT PRINCIPAL
-# =====================================================
+    # ====================================================
+# CHAT
+# ====================================================
 
 if menu == "💬 Chat":
 
     st.title("🦍 KINGKONG CHAT")
-
-    st.caption(
-        "Tu centro de comunicación e IA."
-    )
 
     for msg in st.session_state.messages:
 
@@ -152,43 +201,43 @@ if menu == "💬 Chat":
             st.markdown(msg["content"])
 
     prompt = st.chat_input(
-        "Escribe un mensaje..."
+        "Pregunta lo que quieras..."
     )
 
     if prompt:
 
         st.session_state.messages.append({
-            "role":"user",
-            "content":prompt
+            "role": "user",
+            "content": prompt
         })
 
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        try:
+
+            response = model.generate_content(
+                prompt
+            )
+
+            answer = response.text
+
+        except Exception as e:
+
+            answer = f"Error: {e}"
+
         with st.chat_message("assistant"):
-
-            try:
-
-                response = model.generate_content(
-                    prompt
-                )
-
-                reply = response.text
-
-            except Exception as e:
-
-                reply = f"Error: {e}"
-
-            st.markdown(reply)
+            st.markdown(answer)
 
         st.session_state.messages.append({
-            "role":"assistant",
-            "content":reply
+            "role": "assistant",
+            "content": answer
         })
 
-# =====================================================
+
+# ====================================================
 # ARCHIVOS
-# =====================================================
+# ====================================================
 
 elif menu == "📁 Archivos":
 
@@ -200,15 +249,13 @@ elif menu == "📁 Archivos":
 
     if uploaded:
 
-        destination = (
+        path = (
             Path("uploads")
             / uploaded.name
         )
 
-        with open(destination, "wb") as f:
-            f.write(
-                uploaded.getbuffer()
-            )
+        with open(path, "wb") as f:
+            f.write(uploaded.read())
 
         st.success(
             f"Archivo guardado: {uploaded.name}"
@@ -235,27 +282,29 @@ elif menu == "📁 Archivos":
         )
 
         st.markdown(
-            f"📄 **{file.name}** ({size_mb:.2f} MB)"
+            f"📄 {file.name} ({size_mb:.2f} MB)"
         )
 
-# =====================================================
+# ====================================================
 # AJUSTES
-# =====================================================
+# ====================================================
 
-elif menu == "⚙️ Ajustes":
+else:
 
     st.title("⚙️ Ajustes")
 
-    st.subheader("🎨 Color Principal")
-
-    color = st.color_picker(
-        "Selecciona color",
-        MAIN_COLOR
+    selected_theme = st.selectbox(
+        "Tema visual",
+        [
+            "🦍 Jungle Neon",
+            "💚 Matrix",
+            "💙 Ocean Cyber",
+            "🟣 Ultra Violet",
+            "❤️ Lava Red"
+        ]
     )
 
-    if color != MAIN_COLOR:
-
-        st.session_state.main_color = color
+    st.session_state.theme = selected_theme
 
     st.markdown("---")
 
@@ -276,18 +325,51 @@ elif menu == "⚙️ Ajustes":
 
     st.markdown("---")
 
-    st.subheader("ℹ️ Información")
+    st.subheader("🎭 Diseño")
 
-    st.write("""
-    KINGKONG CHAT V1
-
-    - Chat Gemini
-    - Gestión de archivos
-    - Preparado para Qwen
-    - Preparado para KINGKONG AI
-    - Preparado para VPS
-    """)
-
-    st.success(
-        "Los cambios visuales se aplicarán al recargar."
+    layout = st.selectbox(
+        "Estilo",
+        [
+            "Telegram",
+            "Discord",
+            "ChatGPT",
+            "Compacto",
+            "Expandido"
+        ]
     )
+
+    st.info(
+        f"Diseño seleccionado: {layout}"
+    )
+
+    st.markdown("---")
+
+    st.subheader("💾 Sistema")
+
+    if st.button(
+        "🗑️ Borrar historial"
+    ):
+
+        st.session_state.messages = []
+
+        st.success(
+            "Historial eliminado"
+        )
+
+    st.markdown("---")
+
+    st.info("""
+🦍 KINGKONG CHAT V1
+
+✅ Gemini integrado
+
+✅ Estilo Neon
+
+✅ Modo Telegram
+
+✅ Gestión de archivos
+
+✅ Preparado para KINGKONG AI
+
+✅ Preparado para Qwen/Ollama
+""")
