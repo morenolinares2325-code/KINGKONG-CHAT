@@ -12,9 +12,7 @@ import base64
 
 def image_to_base64(path):
     with open(path, "rb") as f:
-        return base64.b64encode(
-            f.read()
-        ).decode()
+        return base64.b64encode(f.read()).decode()
 
 # =================================================
 # CONFIG
@@ -27,19 +25,10 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 connected = False
 
 try:
-
-    genai.configure(
-        api_key=API_KEY
-    )
-
-    model = genai.GenerativeModel(
-        "gemini-1.5-flash"
-    )
-
+    genai.configure(api_key=API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")
     connected = True
-
 except:
-
     connected = False
 
 # =================================================
@@ -78,30 +67,29 @@ st.set_page_config(
     layout="wide"
 )
 
-bg_image = image_to_base64(
-    "assets/jungle.jpg"
-)
+# Imagen de fondo en base64
+bg_css = ""
+if Path("assets/jungle.jpg").exists():
+    bg_image = image_to_base64("assets/jungle.jpg")
+    bg_css = f'url("data:image/jpeg;base64,{bg_image}");'
+
 st.markdown(
 f"""
 <style>
 
 .stApp {{
-
 background-image:
 linear-gradient(
 rgba(0,0,0,.75),
 rgba(0,0,0,.85)
 ),
-url("data:image/jpeg;base64,{bg_image}");
-
+{bg_css};
 background-size:cover;
 background-position:center;
 background-attachment:fixed;
-
 }}
 
 section[data-testid="stSidebar"] {{
-
 background:
 linear-gradient(
 180deg,
@@ -109,60 +97,43 @@ rgba(5,20,8,.95),
 rgba(10,35,15,.95),
 rgba(5,20,8,.95)
 );
-
 border-right:
 2px solid {st.session_state.theme_color};
-
 }}
 
 [data-testid="stChatMessage"] {{
-
 background:
 rgba(15,15,15,.55);
-
 backdrop-filter:
 blur(10px);
-
 border:
 1px solid rgba(255,255,255,.08);
-
 border-radius:
 {st.session_state.radius}px;
-
 }}
 
 .stChatInput input {{
-
 background:
 {st.session_state.input_color}
 !important;
-
 color:black !important;
-
 font-size:
 {st.session_state.font_size}px
 !important;
-
 border:
 3px solid
 {st.session_state.theme_color}
 !important;
-
 border-radius:
 25px !important;
-
 }}
 
 h1,h2,h3 {{
-
 color:
 {st.session_state.theme_color};
-
 text-shadow:
-
 0 0 10px {st.session_state.theme_color},
 0 0 25px {st.session_state.theme_color};
-
 }}
 
 footer {{
@@ -174,8 +145,11 @@ visibility:hidden;
 unsafe_allow_html=True
 )
 
-with st.sidebar:
+# =================================================
+# SIDEBAR
+# =================================================
 
+with st.sidebar:
     st.markdown(
         f"""
         <h1 style="
@@ -215,20 +189,11 @@ with st.sidebar:
     st.markdown("---")
 
     if connected:
-
-        st.success(
-            "🟢 IA CONECTADA"
-        )
-
+        st.success("🟢 IA CONECTADA")
     else:
+        st.error("🔴 IA DESCONECTADA")
 
-        st.error(
-            "🔴 IA DESCONECTADA"
-        )
-
-    reloj = datetime.now().strftime(
-        "%H:%M:%S"
-    )
+    reloj = datetime.now().strftime("%H:%M:%S")
 
     st.markdown(
         f"""
@@ -241,7 +206,12 @@ with st.sidebar:
         """,
         unsafe_allow_html=True
     )
-    if menu == "💬 Chat":
+
+# =================================================
+# CONTENIDO PRINCIPAL (FUERA DEL SIDEBAR)
+# =================================================
+
+if menu == "💬 Chat":
 
     st.markdown(
         f"""
@@ -257,73 +227,45 @@ with st.sidebar:
     )
 
     for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-        with st.chat_message(
-            msg["role"]
-        ):
-
-            st.markdown(
-                msg["content"]
-            )
-
-    prompt = st.chat_input(
-        "Escribe un mensaje..."
-    )
+    prompt = st.chat_input("Escribe un mensaje...")
 
     if prompt:
-
         st.session_state.messages.append(
             {
-                "role":"user",
-                "content":prompt
+                "role": "user",
+                "content": prompt
             }
         )
 
         try:
-
-            response = model.generate_content(
-                prompt
-            )
-
+            response = model.generate_content(prompt)
             answer = response.text
-
         except Exception as e:
-
             answer = f"Error: {e}"
 
         st.session_state.messages.append(
             {
-                "role":"assistant",
-                "content":answer
+                "role": "assistant",
+                "content": answer
             }
         )
 
         st.rerun()
 
-
 elif menu == "📁 Archivos":
 
     st.title("📁 Archivos")
 
-    uploaded = st.file_uploader(
-        "Subir archivo"
-    )
+    uploaded = st.file_uploader("Subir archivo")
 
     if uploaded:
+        with open(Path("uploads") / uploaded.name, "wb") as f:
+            f.write(uploaded.getbuffer())
 
-        with open(
-            Path("uploads")
-            / uploaded.name,
-            "wb"
-        ) as f:
-
-            f.write(
-                uploaded.getbuffer()
-            )
-
-        st.success(
-            f"Guardado: {uploaded.name}"
-        )
+        st.success(f"Guardado: {uploaded.name}")
 
 else:
 
@@ -365,10 +307,6 @@ else:
         st.session_state.chat_width
     )
 
-    if st.button(
-        "🗑️ Borrar historial"
-    ):
-
+    if st.button("🗑️ Borrar historial"):
         st.session_state.messages = []
-
         st.rerun()
