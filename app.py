@@ -4,18 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import os
 import base64
-
-# =================================================
-# IMPORTACIÓN DIRECTA DE GROQ
-# =================================================
-
-try:
-    from groq import Groq
-except ImportError:
-    import subprocess
-    import sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "groq"])
-    from groq import Groq
+from groq import Groq
 
 # =================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -52,10 +41,9 @@ def get_background_css() -> str:
     return ""
 
 # =================================================
-# CONEXIÓN DIRECTA CON GROQ (CLAVE FIJA Y SEGURA)
+# CONEXIÓN CON GROQ
 # =================================================
 
-# Si existe en variables de entorno o secrets la usa, si no, usa directamente tu clave
 GROQ_KEY = (
     os.getenv("GROQ_API_KEY")
     or (st.secrets.get("GROQ_API_KEY") if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets else None)
@@ -84,7 +72,7 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# ESTILOS CSS (LETRAS BLANCAS Y CERO FRANJA BLANCA)
+# ESTILOS CSS
 # =================================================
 
 bg_css = get_background_css()
@@ -92,7 +80,6 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* 1. Fondo global oscuro continuo */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(0, 0, 0, 0.78), rgba(4, 12, 6, 0.88)),
@@ -108,7 +95,6 @@ st.markdown(
         background-color: transparent !important;
     }}
 
-    /* 2. Quitar barra blanca inferior de Streamlit */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -125,8 +111,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
-    /* 3. Píldora de texto blanca */
-.stChatInput textarea, 
+    .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
         color: #111111 !important;
@@ -141,9 +126,8 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
-    /* 4. Letras 100% blancas en la conversación */
     [data-testid="stChatMessage"] {{
-        background: rgba(16, 26, 18, 0.82) !important;
+background: rgba(16, 26, 18, 0.82) !important;
         backdrop-filter: blur(14px);
         border: 1px solid rgba(255, 255, 255, 0.22) !important;
         border-radius: {st.session_state.radius}px !important;
@@ -160,7 +144,6 @@ st.markdown(
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
     }}
 
-    /* 5. Barra lateral cristal */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
@@ -182,7 +165,7 @@ st.markdown(
 )
 
 # =================================================
-# SIDEBAR
+# BARRA LATERAL
 # =================================================
 
 with st.sidebar:
@@ -206,10 +189,8 @@ with st.sidebar:
     )
 
     st.markdown("---")
-
     st.success("🟢 SISTEMA CONECTADO", icon="⚡")
 
-    # Reloj continuo en tiempo real
     components.html(
         f"""
         <div style="
@@ -238,8 +219,9 @@ with st.sidebar:
         """,
         height=85
     )
+
 # =================================================
-# PANTALLA: CHAT PRINCIPAL (STREAMING INMEDIATO)
+# PANTALLA: CHAT PRINCIPAL
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -263,16 +245,14 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
-
-        with st.chat_message("assistant", avatar="🦍"):
+with st.chat_message("assistant", avatar="🦍"):
             historial = [
-                {"role": "system", "content": "Eres KingKong, un asistente inteligente, directo, astuto y con gran energía en un entorno selvático y tecnológico."}
+                {"role": "system", "content": "Eres KingKong, un asistente inteligente, directo y conciso con temática tecnológica de selva."}
             ]
             for m in st.session_state.messages:
                 historial.append({"role": m["role"], "content": m["content"]})
 
             try:
-                # Intenta con el modelo 70B; si se satura, pasa de inmediato al 8B
                 modelos_groq = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
                 stream = None
                 for mod in modelos_groq:
@@ -300,7 +280,7 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PANTALLA: SALA DE CONVERSACIÓN HUMANA
+# PANTALLA: SALA HUMANA
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
@@ -335,7 +315,8 @@ elif menu == "👥 Sala de Conversación":
                     st.markdown(f"📎 Archivo adjunto: {msg['file_name']}")
 
     mensaje_sala = st.chat_input("Escribe en la sala para todos...")
-if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la Sala")):
+
+    if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la Sala")):
         hora_actual = datetime.now().strftime("%H:%M")
         nuevo_mensaje = {
             "user": st.session_state.user_name,
@@ -359,9 +340,8 @@ if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la S
         st.rerun()
 
 # =================================================
-# PANTALLA: ARCHIVOS Y FONDO
+# PANTALLA: ARCHIVOS
 # =================================================
-
 elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
@@ -412,7 +392,7 @@ else:
     st.subheader("🧹 Mantenimiento")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🗑️ Borrar Historial de Chat", use_container_width=True):
+        if st.button("🗑️️ Borrar Historial de Chat", use_container_width=True):
             st.session_state.messages = []
             st.success("Historial eliminado.")
             st.rerun()
