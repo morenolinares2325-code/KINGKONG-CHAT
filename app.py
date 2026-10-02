@@ -17,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.cwd()
+BASE_DIR = Path(file).resolve().parent if "file" in locals() else Path.cwd()
 ASSETS_DIR = BASE_DIR / "assets"
 UPLOADS_DIR = BASE_DIR / "uploads"
 
@@ -118,7 +118,6 @@ st.markdown(
 # =================================================
 # SIDEBAR
 # =================================================
-
 with st.sidebar:
     st.markdown(
         f"""
@@ -202,17 +201,17 @@ elif menu == "👥 Sala de Conversación":
 
     for msg in st.session_state.room_messages:
         with st.chat_message("user", avatar="💬"):
-            st.markdown(f"**{msg['user']}** <small>({msg['time']})</small>", unsafe_allow_html=True)
+            st.markdown(f"{msg['user']} <small>({msg['time']})</small>", unsafe_allow_html=True)
             if msg.get("text"):
                 st.markdown(msg["text"])
             if msg.get("file_name"):
                 if msg.get("is_image"):
                     st.image(msg["file_path"], caption=msg["file_name"], width=300)
                 else:
-                    st.markdown(f"📎 `{msg['file_name']}`")
+                    st.markdown(f"📎 {msg['file_name']}")
 
     with st.form("form_sala", clear_on_submit=True):
-        c1, c2 = st.columns([1, 3])
+c1, c2 = st.columns([1, 3])
         with c1:
             u_name = st.text_input("Alias:", value=st.session_state.user_name)
         with c2:
