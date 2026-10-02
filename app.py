@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import google.generativeai as genai
 from dotenv import load_dotenv
 from pathlib import Path
@@ -55,13 +56,16 @@ def get_background_css() -> str:
 # =================================================
 
 defaults = {
-    "messages": [],
-    "theme_color": "#39FF14",       # Verde neón
-    "secondary_color": "#00C853",   # Verde selva
-    "input_color": "#FFFFFF",       # Caja de chat blanca
+    "messages": [],              # Chat con IA
+    "room_messages": [],         # Chat entre personas (Sin IA)
+    "user_name": "Explorador",   # Nombre del usuario en la sala
+    "theme_color": "#39FF14",    # Verde neón
+    "secondary_color": "#00C853",# Verde selva
+    "input_color": "#FFFFFF",    # Entrada blanca estilo Telegram
     "font_size": 16,
     "radius": 18,
-    "chat_width": 1000
+    "chat_width": 1000,
+    "active_model_name": "Ninguno"
 }
 
 for key, val in defaults.items():
@@ -69,12 +73,11 @@ for key, val in defaults.items():
         st.session_state[key] = val
 
 # =================================================
-# CONEXIÓN CON GEMINI (SECRETS Y .ENV)
+# CONEXIÓN CON GEMINI (FALLBACK DE MODELOS)
 # =================================================
 
 load_dotenv()
 
-# Lee de st.secrets (Streamlit Cloud o .streamlit/secrets.toml) o de .env
 API_KEY = None
 if "GEMINI_API_KEY" in st.secrets:
     API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -84,13 +87,33 @@ elif os.getenv("GEMINI_API_KEY"):
 connected = False
 model = None
 
+MODELOS_CANDIDATOS = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite"
+]
+
 if API_KEY:
     try:
         genai.configure(api_key=API_KEY)
-        # Usamos gemini-2.0-flash para evitar el 404
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        connected = True
-    except Exception as e:
+        for m_name in MODELOS_CANDIDATOS:
+            try:
+                candidate = genai.GenerativeModel(m_name)
+                model = candidate
+                st.session_state.active_model_name = m_name
+                connected = True
+                break
+            except Exception:
+                continue
+
+        if not model:
+            model = genai.GenerativeModel("gemini-3.8-flash")
+            st.session_state.active_model_name = "gemini-3.8-flash"
+            connected = True
+    except Exception:
         connected = False
 
 # =================================================
@@ -114,12 +137,11 @@ st.markdown(
         background-repeat: no-repeat !important;
     }}
 
-    /* 2. Barra superior transparente */
     [data-testid="stHeader"] {{
         background-color: transparent !important;
     }}
 
-    /* 3. ELIMINAR LA FRANJA BLANCA INFERIOR DE STREAMLIT */
+    /* 2. Eliminar la franja blanca inferior de Streamlit */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -136,7 +158,7 @@ st.markdown(
         padding-bottom: 20px !important;
     }}
 
-    /* 4. ÚNICAMENTE LA CAJA DE TEXTO BLANCA ESTILO TELEGRAM */
+    /* 3. Únicamente la caja de texto blanca estilo Telegram */
     .stChatInput textarea, 
     .stChatInput input {{
         background-color: {st.session_state.input_color} !important;
@@ -152,14 +174,14 @@ st.markdown(
         color: {st.session_state.theme_color} !important;
     }}
 
-    /* 5. Barra lateral con efecto cristal */
+    /* 4. Barra lateral con efecto cristal */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(3, 15, 6, 0.95), rgba(7, 24, 12, 0.95)) !important;
         backdrop-filter: blur(15px);
         border-right: 2px solid {st.session_state.theme_color}55;
     }}
 
-    /* 6. Burbujas de mensajes */
+    /* 5. Burbujas de mensajes */
     [data-testid="stChatMessage"] {{
         background: rgba(16, 26, 18, 0.70) !important;
         backdrop-filter: blur(14px);
@@ -173,7 +195,7 @@ st.markdown(
         border-color: {st.session_state.theme_color}66;
     }}
 
-    /* 7. Tipografía Neón */
+    /* 6. Tipografía Neón */
     h1, h2, h3 {{
         color: {st.session_state.theme_color} !important;
         text-shadow: 0 0 10px {st.session_state.theme_color}66, 0 0 25px {st.session_state.theme_color}33;
@@ -208,7 +230,7 @@ with st.sidebar:
 
     menu = st.radio(
         "Navegación",
-        ["💬 Chat", "📁 Archivos", "⚙️ Ajustes"],
+        ["💬 Chat con IA", "👥 Sala de Chat (Sin IA)", "📁 Archivos", "⚙️ Ajustes"],
         label_visibility="collapsed"
     )
 
@@ -216,58 +238,75 @@ with st.sidebar:
 
     # Estado de la IA
     if connected:
-        st.success("🟢 IA ONLINE (Gemini)", icon="⚡")
+        st.success("🟢 IA ONLINE", icon="⚡")
+        st.caption(f"🤖 Modelo: `{st.session_state.active_model_name}`")
     else:
         st.error("🔴 IA OFFLINE (Revisa API Key)", icon="⚠️")
 
-    # Reloj en vivo
-    reloj = datetime.now().strftime("%H:%M:%S")
-    st.markdown(
+    # Reloj en tiempo real continuo vía HTML / JS
+    components.html(
         f"""
-        <div style="text-align: center; padding: 6px; background: rgba(0,0,0,0.3); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
-            <small style="color: #aaa;">HORA LOCAL</small>
-            <div style="font-size: 20px; font-weight: bold; color: {st.session_state.theme_color};">{reloj}</div>
+        <div style="
+            text-align: center;
+            padding: 8px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            margin-top: 10px;
+        ">
+            <div style="color: #aaa; font-size: 10px; letter-spacing: 1px;">TIEMPO EN VIVO</div>
+            <div id="live_clock" style="font-size: 22px; font-weight: bold; color: {st.session_state.theme_color};">00:00:00</div>
         </div>
+        <script>
+            function updateClock() {{
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                document.getElementById('live_clock').innerText = hours + ':' + minutes + ':' + seconds;
+            }}
+            updateClock();
+            setInterval(updateClock, 1000);
+        </script>
         """,
-        unsafe_allow_html=True
+        height=85
     )
 
 # =================================================
-# PANTALLA: CHAT
+# PANTALLA: CHAT CON IA
 # =================================================
 
-if menu == "💬 Chat":
+if menu == "💬 Chat con IA":
     st.markdown(
         f"""
         <h1 style="text-align:center; font-size: 42px; margin-bottom: 20px;">
-        🦍 KINGKONG CHAT
+        🦍 KINGKONG CHAT (IA)
         </h1>
         """,
         unsafe_allow_html=True
     )
 
-    # Si falta la API Key, opción de ingresarla en pantalla
     if not connected:
-        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o guárdala en Secrets / .env:")
+        st.info("💡 Ingresa tu `GEMINI_API_KEY` temporal o configúrala en Secrets / .env:")
         temp_key = st.text_input("Gemini API Key:", type="password")
         if temp_key:
             try:
                 genai.configure(api_key=temp_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel("gemini-3.8-flash")
+                st.session_state.active_model_name = "gemini-3.8-flash"
                 connected = True
                 st.success("¡Conectado exitosamente!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al conectar: {e}")
 
-    # Mostrar historial de mensajes
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Entrada de mensaje
-    prompt = st.chat_input("Escribe un mensaje en la selva...")
+    prompt = st.chat_input("Escribe un mensaje a la IA...")
 
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -276,22 +315,95 @@ if menu == "💬 Chat":
 
         with st.chat_message("assistant", avatar="🦍"):
             if connected and model:
-                try:
-                    response = model.generate_content(prompt, stream=True)
-                    
-                    def stream_generator():
-                        for chunk in response:
-                            yield chunk.text
+                full_response = ""
+                for m_candidate in [st.session_state.active_model_name] + MODELOS_CANDIDATOS:
+                    try:
+                        active_m = genai.GenerativeModel(m_candidate)
+                        response = active_m.generate_content(prompt, stream=True)
+                        
+                        def stream_generator():
+                            for chunk in response:
+                                yield chunk.text
 
-                    full_response = st.write_stream(stream_generator())
-                except Exception as e:
-                    full_response = f"⚠️ Error en la jungla: {e}"
+                        full_response = st.write_stream(stream_generator())
+                        st.session_state.active_model_name = m_candidate
+                        break
+                    except Exception:
+                        continue
+                
+                if not full_response:
+                    full_response = "⚠️ No se pudo obtener respuesta con los modelos configurados."
                     st.error(full_response)
             else:
-                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY en los Secrets de Streamlit o en el archivo `.env`."
+                full_response = "⚠️ La IA no está conectada. Configura tu GEMINI_API_KEY."
                 st.warning(full_response)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# =================================================
+# PANTALLA: SALA DE CHAT HUMANO (SIN IA)
+# =================================================
+
+elif menu == "👥 Sala de Chat (Sin IA)":
+    st.markdown(
+        f"""
+        <h1 style="text-align:center; font-size: 38px; margin-bottom: 5px;">
+        👥 SALA DE CONVERSACIÓN
+        </h1>
+        <p style="text-align:center; opacity: 0.7; font-size: 14px; margin-bottom: 25px;">
+        Chat directo entre personas: comparte textos, fotos y documentos sin IA.
+        </p>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Panel superior de usuario y adjuntos
+    with st.expander("👤 Configurar tu Nombre y Adjuntar Archivos", expanded=False):
+        col_u, col_f = st.columns([1, 2])
+        with col_u:
+            st.session_state.user_name = st.text_input("Tu nombre / alias:", value=st.session_state.user_name)
+        with col_f:
+            archivo_compartido = st.file_uploader("Adjuntar archivo o imagen:", key="uploader_sala")
+
+    # Mostrar mensajes de la sala
+    for msg in st.session_state.room_messages:
+        with st.chat_message("user", avatar="💬"):
+            st.markdown(f"**{msg['user']}** <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
+            if msg.get("text"):
+                st.markdown(msg["text"])
+            if msg.get("file_name"):
+                if msg.get("is_image"):
+                    st.image(msg["file_path"], caption=msg["file_name"], width=350)
+                else:
+                    st.markdown(f"📎 **Archivo adjunto:** `{msg['file_name']}`")
+
+    # Entrada de texto para la sala
+    mensaje_sala = st.chat_input("Escribe en la sala para todos...")
+
+    # Enviar mensaje con texto o con archivo pendiente
+    if mensaje_sala or (archivo_compartido and st.button("📤 Enviar Archivo a la Sala")):
+        hora_actual = datetime.now().strftime("%H:%M")
+        nuevo_mensaje = {
+            "user": st.session_state.user_name,
+            "time": hora_actual,
+            "text": mensaje_sala if mensaje_sala else "",
+            "file_name": None,
+            "file_path": None,
+            "is_image": False
+        }
+
+        # Procesar archivo adjunto si lo hay
+        if archivo_compartido:
+            ruta_guardada = UPLOADS_DIR / archivo_compartido.name
+            with open(ruta_guardada, "wb") as f:
+                f.write(archivo_compartido.getbuffer())
+            
+            nuevo_mensaje["file_name"] = archivo_compartido.name
+            nuevo_mensaje["file_path"] = str(ruta_guardada)
+            nuevo_mensaje["is_image"] = archivo_compartido.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
+
+        st.session_state.room_messages.append(nuevo_mensaje)
+        st.rerun()
 
 # =================================================
 # PANTALLA: ARCHIVOS Y FONDO
@@ -301,7 +413,7 @@ elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
     st.subheader("🖼️ Cambiar Fondo de Pantalla")
-    st.caption("Sube aquí cualquier foto (JPG o PNG). Se aplicará al instante como fondo.")
+    st.caption("Sube aquí cualquier foto (JPG o PNG) y se aplicará inmediatamente.")
     
     nuevo_fondo = st.file_uploader(
         "Subir nueva imagen de fondo",
@@ -378,16 +490,13 @@ else:
     col_btn1, col_btn2 = st.columns(2)
     
     with col_btn1:
-        if st.button("🗑️ Borrar Historial de Chat", use_container_width=True):
+        if st.button("🗑️ Borrar Historial IA", use_container_width=True):
             st.session_state.messages = []
-            st.success("Historial eliminado.")
+            st.success("Historial de IA eliminado.")
             st.rerun()
 
     with col_btn2:
-        if st.button("🔄 Restaurar Estilos por Defecto", use_container_width=True):
-            st.session_state.theme_color = "#39FF14"
-            st.session_state.secondary_color = "#00C853"
-            st.session_state.input_color = "#FFFFFF"
-            st.session_state.font_size = 16
-            st.session_state.radius = 18
+        if st.button("🗑️ Borrar Mensajes Sala Humana", use_container_width=True):
+            st.session_state.room_messages = []
+            st.success("Historial de la sala eliminado.")
             st.rerun()
