@@ -88,7 +88,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CON CONTROL TOTAL DE CÓDIGO Y TEXTO
+# ESTILOS CSS
 # =================================================
 
 bg_css = get_background_css()
@@ -174,7 +174,6 @@ st.markdown(
         text-shadow: none !important;
     }}
 
-    /* Tokens internos de sintaxis de Streamlit */
     [data-testid="stChatMessage"] pre code * {{
         color: {st.session_state.code_text_color} !important;
         text-shadow: none !important;
@@ -283,7 +282,6 @@ if menu == "💬 KingKong Chat":
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            # Saneamiento del historial limitando últimos mensajes para no desbordar tokens
             historial = [{"role": "system", "content": "Eres KingKong, un asistente conciso, ágil y directo."}]
             ultimos_mensajes = st.session_state.messages[-6:]
             for m in ultimos_mensajes:
@@ -297,14 +295,32 @@ if menu == "💬 KingKong Chat":
             stream = None
             error_detalles = None
 
-            candidatos = [
-                "llama-3.3-70b-versatile",
-                "llama-3.1-70b-versatile",
-                "llama3-70b-8192",
-                "mixtral-8x7b-32768"
+            # 1. Filtro dinámico estricto: solo modelos de texto soportados actualmente
+            candidatos = []
+            try:
+                modelos_remotos = client.models.list().data
+                for mod in modelos_remotos:
+                    m_id = mod.id.lower()
+                    # Descartar modelos de audio, síntesis de voz, moderación o no compatibles
+                    if any(bad in m_id for bad in ["whisper", "guard", "orpheus", "mixtral", "safeguard"]):
+                        continue
+                    candidatos.append(mod.id)
+            except Exception:
+                pass
+
+            # Lista prioritaria de producción actual
+            prioritarios = [
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b",
+                "qwen/qwen3.8-27b",
+                "llama-3.3-70b-versatile"
             ]
 
-            for m_id in candidatos:
+            lista_final = [m for m in prioritarios if m in candidatos] + [m for m in candidatos if m not in prioritarios]
+            if not lista_final:
+                lista_final = prioritarios
+
+            for m_id in lista_final:
                 try:
                     stream = client.chat.completions.create(
                         model=m_id,
@@ -400,7 +416,7 @@ elif menu == "👥 Sala de Conversación":
 elif menu == "📁 Archivos":
     st.title("📁 Gestor de Archivos y Fondo")
 
-    st.subheader("🖼️️ Cambiar Fondo de Pantalla")
+    st.subheader("🖼️ Cambiar Fondo de Pantalla")
     nuevo_fondo = st.file_uploader(
         "Subir nueva imagen de fondo",
         type=["jpg", "jpeg", "png"],
