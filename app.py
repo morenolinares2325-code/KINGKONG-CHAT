@@ -1,8 +1,9 @@
 import streamlit as st
 import datetime
 import uuid
+from openai import OpenAI
 
-# --- CONFIGURACIÓN DE PÁGINA ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="KingKong Chat",
     page_icon="🦍",
@@ -10,28 +11,69 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- IDENTIFICADOR AUTOMÁTICO DE USUARIO ---
+# --- 2. IDENTIFICADOR DE USUARIO PERSISTENTE ---
 if "user_id" not in st.query_params:
     st.query_params["user_id"] = f"Usuario_{str(uuid.uuid4())[:4]}"
 
 mi_usuario = st.query_params.get("user_id", "Usuario_1")
 
-# --- ESTILOS CSS: FONDO SELVA NEGRO + TEXTOS 100% BLANCOS + NEÓN VERDE ---
+# --- 3. CONEXIÓN CON GROK (xAI) ---
+# Toma la clave guardada en secrets (ej. GROK_API_KEY o XAI_API_KEY)
+api_key_grok = (
+    st.secrets.get("GROK_API_KEY") 
+    or st.secrets.get("XAI_API_KEY") 
+    or st.secrets.get("grok_api_key") 
+    or ""
+)
+
+client_grok = None
+if api_key_grok:
+    client_grok = OpenAI(
+        api_key=api_key_grok,
+        base_url="https://api.x.ai/v1"
+    )
+
+def consultar_grok(historial):
+    if not client_grok:
+        return "⚠️ Clave de Grok no detectada en st.secrets['GROK_API_KEY']."
+    try:
+        # Construir mensajes con contexto previo para que Grok recuerde todo
+        mensajes_prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "Eres KingKong IA, un asistente analítico avanzado y directo en la consola Jungle Console Edition. "
+                    "Tienes nivel experto en trading, mercados financieros (Forex, índices, acciones), tecnología y programación. "
+                    "Analiza a fondo las peticiones del usuario con datos estructurados y precisos en español."
+                )
+            }
+        ]
+        for m in historial:
+            rol = "assistant" if m["remitente"] == "IA KingKong" else "user"
+            mensajes_prompt.append({"role": rol, "content": m["texto"]})
+
+        completion = client_grok.chat.completions.create(
+            model="grok-beta",  # o grok-2-latest
+            messages=mensajes_prompt,
+            temperature=0.3
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"❌ Error al consultar a Grok: {str(e)}"
+
+# --- 4. ESTILOS VISUALES: TEMA OSCURO + NEÓN + TEXTOS EN BLANCO ---
 st.markdown("""
     <style>
-    /* Fondo general oscuro estilo Jungle Console */
     .stApp {
         background-color: #060d09 !important;
         color: #ffffff !important;
     }
     
-    /* Barra lateral */
     [data-testid="stSidebar"] {
         background-color: #08140c !important;
         border-right: 1px solid rgba(0, 255, 102, 0.2) !important;
     }
 
-    /* TODOS los textos del menú lateral en BLANCO NÍTIDO */
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] p,
@@ -41,7 +83,6 @@ st.markdown("""
         font-size: 1.02rem !important;
     }
 
-    /* BURBUJAS DE MENSAJES: TEXTO SIEMPRE BLANCO Y LEGIBLE */
     [data-testid="stChatMessage"] {
         background-color: #101e14 !important;
         border: 1px solid rgba(0, 255, 102, 0.25) !important;
@@ -55,29 +96,27 @@ st.markdown("""
         font-size: 1rem !important;
     }
 
-    /* CAJA DE TEXTO PARA ESCRIBIR: FONDO OSCURO Y TEXTO BLANCO */
+    [data-testid="stBottom"], [data-testid="stBottom"] > div {
+        background-color: #060d09 !important;
+        border-top: 1px solid rgba(0, 255, 102, 0.15) !important;
+    }
     [data-testid="stChatInput"] {
-        background-color: transparent !important;
+        background-color: #0d1a10 !important;
+        border: 1.5px solid #00FF66 !important;
+        border-radius: 14px !important;
     }
     [data-testid="stChatInput"] textarea {
         color: #ffffff !important;
-        background-color: #0d1a10 !important;
-        border: 1.5px solid #00FF66 !important;
-        border-radius: 12px !important;
-    }
-    [data-testid="stChatInput"] textarea::placeholder {
-        color: #6d8b76 !important;
+        background-color: transparent !important;
     }
 
-    /* TU MONO ORIGINAL 3D CON AURA NEÓN VERDE */
     .gorila-original-aura {
-        font-size: 5rem;
+        font-size: 4.8rem;
         display: inline-block;
         filter: drop-shadow(0 0 22px #00FF66) drop-shadow(0 0 45px rgba(0, 255, 102, 0.6));
         margin-bottom: 2px;
     }
 
-    /* TÍTULO VERDE NEÓN KINGKONG CHAT */
     .titulo-neon {
         color: #00FF66 !important;
         font-weight: 900 !important;
@@ -94,10 +133,9 @@ st.markdown("""
         letter-spacing: 3px !important;
         font-size: 0.78rem !important;
         font-weight: 600 !important;
-        margin-bottom: 25px !important;
+        margin-bottom: 22px !important;
     }
 
-    /* PANEL SISTEMA CONECTADO Y RELOJ */
     .panel-consola-jungle {
         background: #0d1b11;
         border: 1px solid rgba(0, 255, 102, 0.3);
@@ -107,7 +145,6 @@ st.markdown("""
         margin-top: 15px;
     }
 
-    /* BOTÓN DESCARGA APK */
     div.stDownloadButton > button {
         background: linear-gradient(135deg, #00FF66 0%, #059669 100%) !important;
         color: #000000 !important;
@@ -120,17 +157,26 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- INICIALIZAR HISTORIAL DE MENSAJES ---
-if "mensajes_sala" not in st.session_state:
-    st.session_state.mensajes_sala = [
+# --- 5. INICIALIZACIÓN DE HISTORIALES SEPARADOS ---
+if "mensajes_ia_solo" not in st.session_state:
+    st.session_state.mensajes_ia_solo = [
         {
             "remitente": "IA KingKong",
-            "texto": "¡Hola! Conexión establecida. Estoy a tu disposición en la jungla.",
+            "texto": "¡Saludos! Soy KingKong IA con motor Grok activo. Pídeme análisis o consultas y las procesaré en profundidad.",
             "hora": datetime.datetime.now().strftime("%H:%M")
         }
     ]
 
-# --- BARRA LATERAL (SIDEBAR ORIGINAL RESTAURADO) ---
+if "mensajes_sala_grupo" not in st.session_state:
+    st.session_state.mensajes_sala_grupo = [
+        {
+            "remitente": "IA KingKong",
+            "texto": "Sala de grupo activa. Activa el interruptor cuando quieras que Grok intervenga en la conversación.",
+            "hora": datetime.datetime.now().strftime("%H:%M")
+        }
+    ]
+
+# --- 6. BARRA LATERAL ---
 with st.sidebar:
     st.markdown("""
         <div style="text-align: center; padding-top: 5px;">
@@ -155,14 +201,13 @@ with st.sidebar:
     hora_sistema = datetime.datetime.now().strftime("%H:%M:%S")
     st.markdown(f"""
         <div class="panel-consola-jungle">
-            <div style="color: #00FF66; font-weight: 700; font-size: 0.85rem;">⚡ SISTEMA CONECTADO</div>
+            <div style="color: #00FF66; font-weight: 700; font-size: 0.85rem;">⚡ SISTEMA CONECTADO (GROK)</div>
             <div style="font-size: 0.72rem; color: #8da0b0; margin-top: 4px;">SESIÓN: <b style="color: #fff;">{mi_usuario}</b></div>
             <div style="font-size: 0.75rem; color: #8da0b0; margin-top: 6px;">TIEMPO EN VIVO</div>
             <div style="color: #00FF66; font-family: monospace; font-size: 1.3rem; font-weight: 800;">{hora_sistema}</div>
         </div>
     """, unsafe_allow_html=True)
 
-    # Botón Descargar APK
     try:
         with open("KingkongChat.apk", "rb") as apk_file:
             st.download_button(
@@ -172,30 +217,71 @@ with st.sidebar:
                 mime="application/vnd.android.package-archive"
             )
     except FileNotFoundError:
-        st.caption("ℹ️ Coloca 'KingkongChat.apk' en tu repo para descarga directa.")
+        st.caption("ℹ️ Coloca 'KingkongChat.apk' en tu repo para descarga.")
 
-# --- VISTAS SEGÚN EL MENÚ LATERAL ---
+# --- 7. VISTAS SEGÚN EL MENÚ ---
 
-# 1. PESTAÑA PRINCIPAL: CHAT
-if menu in ["💬 KingKong Chat", "👥 Sala de Conversación"]:
-    # Tu mono 3D original con aura verde neón y el título
+# ========================================================
+# PESTAÑA 1: 💬 KINGKONG CHAT (SOLO CON GROK)
+# ========================================================
+if menu == "💬 KingKong Chat":
     st.markdown("""
         <div style="text-align: center; margin-top: 5px;">
             <div class="gorila-original-aura">🦍</div>
             <div class="titulo-neon">KINGKONG CHAT</div>
-            <div class="subtitulo-jungle">JUNGLE CONSOLE EDITION</div>
+            <div class="subtitulo-console">MODO GROK IA DIRECTO · ANÁLISIS TOTAL</div>
         </div>
     """, unsafe_allow_html=True)
 
-    # Mostrar mensajes con textos blancos
-    for msg in st.session_state.mensajes_sala:
+    for msg in st.session_state.mensajes_ia_solo:
+        if msg["remitente"] == "IA KingKong":
+            with st.chat_message("assistant", avatar="🦍"):
+                st.markdown(f"<span style='color: #00FF66; font-weight: bold;'>🦍 KingKong IA</span> · <small style='color: #8da0b0;'>{msg['hora']}</small>", unsafe_allow_html=True)
+                st.markdown(f"<div style='color: #ffffff !important;'>{msg['texto']}</div>", unsafe_allow_html=True)
+        else:
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(f"<span style='color: #00FF66; font-weight: bold;'>Tú</span> · <small style='color: #8da0b0;'>{msg['hora']}</small>", unsafe_allow_html=True)
+                st.markdown(f"<div style='color: #ffffff !important;'>{msg['texto']}</div>", unsafe_allow_html=True)
+
+    if prompt := st.chat_input("Pide un análisis detallado a Grok..."):
+        hora_envio = datetime.datetime.now().strftime("%H:%M")
+        
+        st.session_state.mensajes_ia_solo.append({
+            "remitente": mi_usuario,
+            "texto": prompt,
+            "hora": hora_envio
+        })
+        
+        with st.spinner("🦍 Grok analizando en tiempo real..."):
+            respuesta_grok = consultar_grok(st.session_state.mensajes_ia_solo)
+
+        st.session_state.mensajes_ia_solo.append({
+            "remitente": "IA KingKong",
+            "texto": respuesta_grok,
+            "hora": hora_envio
+        })
+        st.rerun()
+
+# ========================================================
+# PESTAÑA 2: 👥 SALA DE GRUPO (COMPAÑEROS + SWITCH GROK)
+# ========================================================
+elif menu == "👥 Sala de Conversación":
+    st.markdown("""
+        <div style="text-align: center; margin-top: 5px;">
+            <div class="gorila-original-aura">👥</div>
+            <div class="titulo-neon">SALA DE GRUPO</div>
+            <div class="subtitulo-console">CHAT CON AMIGOS · PARTICIPACIÓN DE GROK OPCIONAL</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    for msg in st.session_state.mensajes_sala_grupo:
         if msg["remitente"] == "IA KingKong":
             with st.chat_message("assistant", avatar="🦍"):
                 st.markdown(f"<span style='color: #00FF66; font-weight: bold;'>🦍 KingKong IA</span> · <small style='color: #8da0b0;'>{msg['hora']}</small>", unsafe_allow_html=True)
                 st.markdown(f"<div style='color: #ffffff !important;'>{msg['texto']}</div>", unsafe_allow_html=True)
         elif msg["remitente"] == mi_usuario:
             with st.chat_message("user", avatar="👤"):
-                st.markdown(f"<span style='color: #00FF66; font-weight: bold;'>Tú</span> · <small style='color: #8da0b0;'>{msg['hora']}</small>", unsafe_allow_html=True)
+                st.markdown(f"<span style='color: #58a6ff; font-weight: bold;'>Tú</span> · <small style='color: #8da0b0;'>{msg['hora']}</small>", unsafe_allow_html=True)
                 st.markdown(f"<div style='color: #ffffff !important;'>{msg['texto']}</div>", unsafe_allow_html=True)
         else:
             with st.chat_message("other", avatar="🐵"):
@@ -204,55 +290,50 @@ if menu in ["💬 KingKong Chat", "👥 Sala de Conversación"]:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Interruptor con el mono para activar o silenciar la IA
-    col_ia, col_info = st.columns([1, 2])
-    with col_ia:
-        ia_activa = st.toggle("🦍 Modo IA Activa", value=True)
-    with col_info:
-        if ia_activa:
-            st.caption("🟢 **IA CONECTADA:** Responde al instante a tus mensajes.")
+    col_sw, col_desc = st.columns([1, 2])
+    with col_sw:
+        ia_activa_grupo = st.toggle("🦍 Modo IA en Grupo", value=False)
+    with col_desc:
+        if ia_activa_grupo:
+            st.caption("🟢 **GROK CONECTADO:** Intervendrá en las dudas del grupo.")
         else:
-            st.caption("⚪ **IA EN PAUSA:** Modo charla libre sin respuestas automáticas.")
+            st.caption("⚪ **GROK EN REPOSO:** Charla privada.")
 
-    # Caja de texto
-    if prompt := st.chat_input("Escribe tu mensaje..."):
-        hora_actual = datetime.datetime.now().strftime("%H:%M")
+    if prompt_grupo := st.chat_input("Escribe a tus compañeros..."):
+        hora_envio = datetime.datetime.now().strftime("%H:%M")
         
-        # Guardar mensaje del usuario
-        st.session_state.mensajes_sala.append({
+        st.session_state.mensajes_sala_grupo.append({
             "remitente": mi_usuario,
-            "texto": prompt,
-            "hora": hora_actual
+            "texto": prompt_grupo,
+            "hora": hora_envio
         })
         
-        # Respuesta de la IA si el interruptor está activado
-        if ia_activa:
-            texto_min = prompt.lower().strip()
-            if "hola" in texto_min:
-                respuesta = "¡Hola! Estoy activa y lista en la consola de KingKong Chat. ¿Qué necesitas consultar?"
-            elif "que tal" in texto_min or "cómo estás" in texto_min:
-                respuesta = "¡Todo perfecto por aquí! Sistema al 100% y listo para la acción."
-            else:
-                respuesta = f"🦍 [KingKong IA]: He recibido tu mensaje: '{prompt}'. ¿En qué más te puedo ayudar?"
-
-            st.session_state.mensajes_sala.append({
+        if ia_activa_grupo:
+            with st.spinner("🦍 Grok respondiendo en el grupo..."):
+                resp_grok_grupo = consultar_grok(st.session_state.mensajes_sala_grupo)
+            
+            st.session_state.mensajes_sala_grupo.append({
                 "remitente": "IA KingKong",
-                "texto": respuesta,
-                "hora": hora_actual
+                "texto": resp_grok_grupo,
+                "hora": hora_envio
             })
             
         st.rerun()
 
-# 2. PESTAÑA: ARCHIVOS
+# ========================================================
+# PESTAÑA 3: 📁 ARCHIVOS
+# ========================================================
 elif menu == "📁 Archivos":
     st.markdown("<h2 style='color: #00FF66;'>📁 Gestor de Archivos</h2>", unsafe_allow_html=True)
-    st.markdown("Comparte o almacena archivos en la sesión de la consola:")
+    st.markdown("Comparte o almacena documentos e imágenes en la consola:")
     archivo = st.file_uploader("Subir documento o imagen", type=["png", "jpg", "pdf", "txt", "csv"])
     if archivo:
         st.success(f"Archivo subido: {archivo.name}")
         st.info(f"Tamaño: {round(archivo.size / 1024, 2)} KB")
 
-# 3. PESTAÑA: AJUSTES (CONFIGURACIÓN Y RULETITA)
+# ========================================================
+# PESTAÑA 4: ⚙️ AJUSTES
+# ========================================================
 elif menu == "⚙️ Ajustes":
     st.markdown("<h2 style='color: #00FF66;'>⚙️ Ajustes y Configuración</h2>", unsafe_allow_html=True)
     
@@ -268,7 +349,8 @@ elif menu == "⚙️ Ajustes":
         st.rerun()
 
     st.subheader("🧹 Mensajes")
-    if st.button("Limpiar conversación"):
-        st.session_state.mensajes_sala = []
-        st.success("Historial borrado.")
+    if st.button("Limpiar historiales de chat"):
+        st.session_state.mensajes_ia_solo = []
+        st.session_state.mensajes_sala_grupo = []
+        st.success("Historiales reiniciados.")
         st.rerun()
