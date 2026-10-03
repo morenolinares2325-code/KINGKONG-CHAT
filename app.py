@@ -235,6 +235,8 @@ st.markdown(
         margin-bottom: 22px;
     }}
 
+    /* Estilo del botón de descarga APK */
+    [data-testid="stSidebar"] a[data-testid="baseButton-secondary"],
     div.stDownloadButton > button {{
         background: linear-gradient(135deg, {st.session_state.theme_color} 0%, #059669 100%) !important;
         color: #000000 !important;
@@ -243,6 +245,9 @@ st.markdown(
         border-radius: 10px !important;
         width: 100% !important;
         margin-top: 10px !important;
+        text-decoration: none !important;
+        display: flex !important;
+        justify-content: center !important;
     }}
 
     footer {{ visibility: hidden; }}
@@ -308,16 +313,12 @@ with st.sidebar:
         height=85
     )
 
-    try:
-        with open("KingkongChat.apk", "rb") as apk_f:
-            st.download_button(
-                label="📲 Descargar App Android (APK)",
-                data=apk_f,
-                file_name="KingkongChat.apk",
-                mime="application/vnd.android.package-archive"
-            )
-    except FileNotFoundError:
-        st.caption("ℹ️ APK disponible para descarga.")
+    # Botón directo hacia la descarga oficial en AppsGeyser
+    st.link_button(
+        label="📲 Descargar App Android (APK)",
+        url="https://appsgeyser.io/20240166/KingKongChat",
+        use_container_width=True
+    )
 
 # =================================================
 # FUNCIÓN DE LLAMADA A GROQ
@@ -523,7 +524,7 @@ elif menu == "📁 Archivos":
     st.markdown(f"<h2 style='color: {st.session_state.theme_color};'>📁 Gestor de Archivos y Scripts</h2>", unsafe_allow_html=True)
 
     # Subida de archivos
-    st.subheader("⬆️️ Subir Archivo al Servidor")
+    st.subheader("⬆ Subir Archivo al Servidor")
     archivo_nuevo = st.file_uploader("Elige un archivo de código, documento o imagen", type=None)
     if archivo_nuevo is not None:
         ruta_destino = UPLOADS_DIR / archivo_nuevo.name
