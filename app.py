@@ -1,7 +1,8 @@
 import streamlit as st
 import datetime
 import uuid
-from openai import OpenAI
+import requests
+import json
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -17,8 +18,7 @@ if "user_id" not in st.query_params:
 
 mi_usuario = st.query_params.get("user_id", "Usuario_1")
 
-# --- 3. CONEXIÓN CON GROK (xAI) ---
-# Toma la clave guardada en secrets (ej. GROK_API_KEY o XAI_API_KEY)
+# --- 3. CONEXIÓN DIRECTA CON GROK VÍA HTTP (Sin librerías externas) ---
 api_key_grok = (
     st.secrets.get("GROK_API_KEY") 
     or st.secrets.get("XAI_API_KEY") 
@@ -26,42 +26,47 @@ api_key_grok = (
     or ""
 )
 
-client_grok = None
-if api_key_grok:
-    client_grok = OpenAI(
-        api_key=api_key_grok,
-        base_url="https://api.x.ai/v1"
-    )
-
 def consultar_grok(historial):
-    if not client_grok:
-        return "⚠️ Clave de Grok no detectada en st.secrets['GROK_API_KEY']."
+    if not api_key_grok:
+        return "⚠️ Clave de Grok no configurada en st.secrets['GROK_API_KEY']."
+    
+    url = "https://api.x.ai/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key_grok}"
+    }
+    
+    mensajes = [
+        {
+            "role": "system",
+            "content": (
+                "Eres KingKong IA, un asistente analítico avanzado en la consola Jungle Console Edition. "
+                "Eres experto en trading, mercados financieros, tecnología y programación. "
+                "Responde con análisis detallados, precisos y en español a las consultas del usuario."
+            )
+        }
+    ]
+    for m in historial:
+        rol = "assistant" if m["remitente"] == "IA KingKong" else "user"
+        mensajes.append({"role": rol, "content": m["texto"]})
+        
+    payload = {
+        "model": "grok-beta",
+        "messages": mensajes,
+        "temperature": 0.3
+    }
+    
     try:
-        # Construir mensajes con contexto previo para que Grok recuerde todo
-        mensajes_prompt = [
-            {
-                "role": "system",
-                "content": (
-                    "Eres KingKong IA, un asistente analítico avanzado y directo en la consola Jungle Console Edition. "
-                    "Tienes nivel experto en trading, mercados financieros (Forex, índices, acciones), tecnología y programación. "
-                    "Analiza a fondo las peticiones del usuario con datos estructurados y precisos en español."
-                )
-            }
-        ]
-        for m in historial:
-            rol = "assistant" if m["remitente"] == "IA KingKong" else "user"
-            mensajes_prompt.append({"role": rol, "content": m["texto"]})
-
-        completion = client_grok.chat.completions.create(
-            model="grok-beta",  # o grok-2-latest
-            messages=mensajes_prompt,
-            temperature=0.3
-        )
-        return completion.choices[0].message.content
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        if res.status_code == 200:
+            data = res.json()
+            return data["choices"][0]["message"]["content"]
+        else:
+            return f"❌ Error de Grok ({res.status_code}): {res.text}"
     except Exception as e:
-        return f"❌ Error al consultar a Grok: {str(e)}"
+        return f"❌ Error de conexión: {str(e)}"
 
-# --- 4. ESTILOS VISUALES: TEMA OSCURO + NEÓN + TEXTOS EN BLANCO ---
+# --- 4. ESTILOS VISUALES: OSCURO SELVA + NEÓN + TEXTOS EN BLANCO ---
 st.markdown("""
     <style>
     .stApp {
@@ -162,7 +167,7 @@ if "mensajes_ia_solo" not in st.session_state:
     st.session_state.mensajes_ia_solo = [
         {
             "remitente": "IA KingKong",
-            "texto": "¡Saludos! Soy KingKong IA con motor Grok activo. Pídeme análisis o consultas y las procesaré en profundidad.",
+            "texto": "¡Saludos! Soy KingKong IA con motor Grok activo. Pídeme análisis detallados del mercado o lo que necesites.",
             "hora": datetime.datetime.now().strftime("%H:%M")
         }
     ]
@@ -171,7 +176,7 @@ if "mensajes_sala_grupo" not in st.session_state:
     st.session_state.mensajes_sala_grupo = [
         {
             "remitente": "IA KingKong",
-            "texto": "Sala de grupo activa. Activa el interruptor cuando quieras que Grok intervenga en la conversación.",
+            "texto": "Sala de grupo activa. Activa el interruptor inferior cuando quieras que Grok participe en vuestra conversación.",
             "hora": datetime.datetime.now().strftime("%H:%M")
         }
     ]
@@ -197,11 +202,10 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Consola en vivo
     hora_sistema = datetime.datetime.now().strftime("%H:%M:%S")
     st.markdown(f"""
         <div class="panel-consola-jungle">
-            <div style="color: #00FF66; font-weight: 700; font-size: 0.85rem;">⚡ SISTEMA CONECTADO (GROK)</div>
+            <div style="color: #00FF66; font-weight: 700; font-size: 0.85rem;">⚡ SISTEMA CONECTADO</div>
             <div style="font-size: 0.72rem; color: #8da0b0; margin-top: 4px;">SESIÓN: <b style="color: #fff;">{mi_usuario}</b></div>
             <div style="font-size: 0.75rem; color: #8da0b0; margin-top: 6px;">TIEMPO EN VIVO</div>
             <div style="color: #00FF66; font-family: monospace; font-size: 1.3rem; font-weight: 800;">{hora_sistema}</div>
@@ -222,14 +226,14 @@ with st.sidebar:
 # --- 7. VISTAS SEGÚN EL MENÚ ---
 
 # ========================================================
-# PESTAÑA 1: 💬 KINGKONG CHAT (SOLO CON GROK)
+# PESTAÑA 1: 💬 KINGKONG CHAT (IA PURA CON GROK)
 # ========================================================
 if menu == "💬 KingKong Chat":
     st.markdown("""
         <div style="text-align: center; margin-top: 5px;">
             <div class="gorila-original-aura">🦍</div>
             <div class="titulo-neon">KINGKONG CHAT</div>
-            <div class="subtitulo-console">MODO GROK IA DIRECTO · ANÁLISIS TOTAL</div>
+            <div class="subtitulo-console">MODO GROK DIRECTO · ANÁLISIS TOTAL</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -263,7 +267,7 @@ if menu == "💬 KingKong Chat":
         st.rerun()
 
 # ========================================================
-# PESTAÑA 2: 👥 SALA DE GRUPO (COMPAÑEROS + SWITCH GROK)
+# PESTAÑA 2: 👥 SALA DE GRUPO (COMPAÑEROS + TOGGLE GROK)
 # ========================================================
 elif menu == "👥 Sala de Conversación":
     st.markdown("""
