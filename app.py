@@ -22,9 +22,44 @@ BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.c
 ASSETS_DIR = BASE_DIR / "assets"
 UPLOADS_DIR = BASE_DIR / "uploads"
 CONFIG_FILE = BASE_DIR / "theme_config.json"
+SHARED_CHAT_FILE = BASE_DIR / "shared_chat_history.json"  # Buzón común compartido
 
 ASSETS_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
+
+# Límite de mensajes guardados en el buzón compartido (reciclaje automático)
+MAX_MENSAJES_SALA = 200
+
+# =================================================
+# FUNCIONES DEL BUZÓN COMPARTIDO (AUTORRECICLADO)
+# =================================================
+
+def cargar_mensajes_compartidos():
+    """Lee el historial compartido desde el disco del servidor."""
+    if SHARED_CHAT_FILE.exists():
+        try:
+            with open(SHARED_CHAT_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def guardar_mensaje_compartido(nuevo_msg):
+    """Guarda el mensaje y recicla borrando los más viejos si supera el límite."""
+    mensajes = cargar_mensajes_compartidos()
+    mensajes.append(nuevo_msg)
+    # Si supera el tope, se queda con los últimos MAX_MENSAJES_SALA (los viejos se van)
+    if len(mensajes) > MAX_MENSAJES_SALA:
+        mensajes = mensajes[-MAX_MENSAJES_SALA:]
+    try:
+        with open(SHARED_CHAT_FILE, "w", encoding="utf-8") as f:
+            json.dump(mensajes, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"Error al sincronizar mensaje: {e}")
+
+# =================================================
+# PERSISTENCIA DE CONFIGURACIÓN
+# =================================================
 
 def image_to_base64(path: Path) -> str:
     try:
@@ -41,10 +76,6 @@ def get_background_css() -> str:
             mime = "png" if ext == ".png" else "jpeg"
             return f'url("data:image/{mime};base64,{b64}")'
     return ""
-
-# =================================================
-# PERSISTENCIA Y VARIABLES
-# =================================================
 
 default_settings = {
     "theme_color": "#00FF66",
@@ -72,8 +103,6 @@ for key, default_val in default_settings.items():
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "room_messages" not in st.session_state:
-    st.session_state.room_messages = []
 
 # =================================================
 # CONEXIÓN CON GROQ
@@ -88,7 +117,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CORREGIDOS: TEXTO VISIBLE AL ESCRIBIR
+# ESTILOS CSS CORREGIDOS (TEXTOS BLANCOS + NEÓN)
 # =================================================
 
 bg_css = get_background_css()
@@ -96,7 +125,7 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* 1. Fondo de la aplicación */
+    /* 1. Fondo de la app */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(4, 10, 6, 0.88), rgba(6, 13, 9, 0.95)),
@@ -123,7 +152,7 @@ st.markdown(
         font-size: 1.02rem !important;
     }}
 
-    /* 3. CORRECCIÓN DEFINITIVA DE LA CAJA DE TEXTO INFERIOR */
+    /* 3. Entrada de texto fija: fondo oscuro y letras blancas visibles */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -140,7 +169,6 @@ st.markdown(
         box-shadow: 0 0 15px rgba(0, 255, 102, 0.3) !important;
     }}
 
-    /* Fondo oscuro y TEXTO BLANCO 100% VISIBLE mientras tecleas */
     [data-testid="stChatInput"] textarea {{
         background-color: #0d1a10 !important;
         color: #ffffff !important;
@@ -180,7 +208,7 @@ st.markdown(
         border-radius: 10px !important;
     }}
 
-    /* 6. Gorila con aura neón */
+    /* 6. Gorila con aura neón original */
     .gorila-original-aura {{
         font-size: 5rem;
         display: inline-block;
@@ -289,7 +317,7 @@ with st.sidebar:
                 mime="application/vnd.android.package-archive"
             )
     except FileNotFoundError:
-        st.caption("ℹ️ Coloca 'KingkongChat.apk' en tu repo para descarga.")
+        st.caption("ℹ️ APK disponible para descarga.")
 
 # =================================================
 # FUNCIÓN DE LLAMADA A GROQ
@@ -383,7 +411,6 @@ if menu == "💬 KingKong Chat":
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Entrada fija abajo con Enter directo
     if prompt := st.chat_input("Escribe a KingKong..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
@@ -395,43 +422,46 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PESTAÑA 2: 👥 SALA DE CONVERSACIÓN (CHAT LIMPIO TIPO TELEGRAM)
+# PESTAÑA 2: 👥 SALA DE GRUPO CON BUZÓN COMPARTIDO Y RECICLADO
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
-    # 1. Si no tiene alias configurado, pedirlo una sola vez en un diálogo limpio
+    # 1. Solicitar alias si aún no lo tiene configurado
     if not st.session_state.user_name:
         st.markdown(
             f"""
             <div style="text-align: center; margin-top: 25px;">
                 <div class="gorila-original-aura">👥</div>
                 <div class="titulo-kingkong-neon">SALA DE GRUPO</div>
-                <p style="color: #8da0b0; font-size: 0.9rem; margin-top: 8px;">Introduce tu alias para unirte a la conversación</p>
+                <p style="color: #8da0b0; font-size: 0.9rem; margin-top: 8px;">Introduce tu alias para acceder al historial compartido</p>
             </div>
             """,
             unsafe_allow_html=True
         )
         col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
         with col_c2:
-            alias_temporal = st.text_input("Tu Nombre / Alias:", placeholder="Ej: Mono Blanco, Alex...")
+            alias_temp = st.text_input("Tu Nombre / Alias:", placeholder="Ej: Mono Blanco, Alex...")
             if st.button("🚀 Entrar al Chat", use_container_width=True):
-                if alias_temporal.strip():
-                    st.session_state.user_name = alias_temporal.strip()
+                if alias_temp.strip():
+                    st.session_state.user_name = alias_temp.strip()
                     st.rerun()
-        st.stop()  # Detiene la pantalla hasta que ingrese el alias
+        st.stop()
 
-    # 2. Una vez ingresado, CHAT NATIVO LIMPIO
-    st.markdown(
-        f"""
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,255,102,0.2); padding-bottom: 10px; margin-bottom: 15px;">
-            <div>
+    # 2. Cabecera limpia y botón para refrescar mensajes si el colega escribió
+    col_t1, col_t2 = st.columns([3, 1])
+    with col_t1:
+        st.markdown(
+            f"""
+            <div style="padding-bottom: 5px;">
                 <span style="font-size: 1.5rem; font-weight: 800; color: {st.session_state.theme_color};">👥 SALA DE GRUPO</span>
-                <span style="font-size: 0.8rem; color: #8da0b0; margin-left: 10px;">Estás como: <b style="color: #fff;">{st.session_state.user_name}</b></span>
+                <span style="font-size: 0.8rem; color: #8da0b0; margin-left: 10px;">Tú: <b style="color: #fff;">{st.session_state.user_name}</b></span>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+            """,
+            unsafe_allow_html=True
+        )
+    with col_t2:
+        if st.button("🔄 Actualizar", help="Cargar nuevos mensajes del grupo"):
+            st.rerun()
 
     # Interruptor para activar la IA en el grupo
     col_tgl, col_info = st.columns([1, 2])
@@ -439,40 +469,44 @@ elif menu == "👥 Sala de Conversación":
         ia_en_grupo = st.toggle("🦍 IA Activa en Grupo", value=False)
     with col_info:
         if ia_en_grupo:
-            st.caption("🟢 **IA CONECTADA:** Responderá a lo que hable el grupo.")
+            st.caption("🟢 **IA CONECTADA:** Responderá tras los mensajes.")
         else:
-            st.caption("⚪ **IA EN SILENCIO:** Charla privada entre compañeros.")
+            st.caption("⚪ **IA EN SILENCIO:** Modo charla privada entre compañeros.")
 
-    # Historial de mensajes
-    for msg in st.session_state.room_messages:
+    # 3. Cargar historial del buzón compartido en disco
+    mensajes_sala = cargar_mensajes_compartidos()
+
+    for msg in mensajes_sala:
         es_ia = msg.get("user") == "KingKong IA"
         es_propio = msg.get("user") == st.session_state.user_name
         avatar = "🦍" if es_ia else ("👤" if es_propio else "💬")
         
         with st.chat_message("assistant" if es_ia else "user", avatar=avatar):
             color_autor = st.session_state.theme_color if es_ia else ("#00FF66" if es_propio else "#58a6ff")
-            autor_nombre = "Tú" if es_propio else msg['user']
-            st.markdown(f"<span style='color: {color_autor}; font-weight: bold;'>{autor_nombre}</span> <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
+            nombre_mostrar = "Tú" if es_propio else msg['user']
+            st.markdown(f"<span style='color: {color_autor}; font-weight: bold;'>{nombre_mostrar}</span> <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    # ENTRADA CON ENTER DIRECTO (Sin formularios ni botones de enviar)
-    if texto_grupo := st.chat_input("Escribe un mensaje al grupo y pulsa Enter..."):
-        hora_actual = datetime.now().strftime("%H:%M")
+    # 4. Input inferior tipo Telegram con Enter directo
+    if texto_grupo := st.chat_input("Escribe al grupo y pulsa Enter..."):
+        hora_envio = datetime.now().strftime("%H:%M")
         
-        st.session_state.room_messages.append({
+        # Guardar en el buzón compartido (auto-reciclable a los 200 mensajes)
+        guardar_mensaje_compartido({
             "user": st.session_state.user_name,
             "role": "user",
-            "time": hora_actual,
+            "time": hora_envio,
             "text": texto_grupo
         })
 
-        # Si el interruptor de IA está encendido, Groq interviene en el hilo
+        # Si el interruptor está activo, la IA lee la sala y responde
         if ia_en_grupo:
             with st.spinner("🦍 KingKong IA respondiendo..."):
-                mensajes_formateados = [{"role": m.get("role", "user"), "content": m.get("text", "")} for m in st.session_state.room_messages]
-                resp_ia = llamar_a_groq(mensajes_formateados)
-                st.session_state.room_messages.append({
+                historial_actual = cargar_mensajes_compartidos()
+                formato_ia = [{"role": m.get("role", "user"), "content": m.get("text", "")} for m in historial_actual]
+                resp_ia = llamar_a_groq(formato_ia)
+                guardar_mensaje_compartido({
                     "user": "KingKong IA",
                     "role": "assistant",
                     "time": datetime.now().strftime("%H:%M"),
@@ -482,37 +516,73 @@ elif menu == "👥 Sala de Conversación":
         st.rerun()
 
 # =================================================
-# PESTAÑA 3: 📁 ARCHIVOS Y FONDO
+# PESTAÑA 3: 📁 ARCHIVOS CON MODO SUBIDA Y DESCARGA
 # =================================================
 
 elif menu == "📁 Archivos":
-    st.title("📁 Gestor de Archivos y Fondo")
+    st.markdown(f"<h2 style='color: {st.session_state.theme_color};'>📁 Gestor de Archivos y Scripts</h2>", unsafe_allow_html=True)
 
-    st.subheader("🖼️ Cambiar Fondo de Pantalla")
-    nuevo_fondo = st.file_uploader(
-        "Subir nueva imagen de fondo",
-        type=["jpg", "jpeg", "png"],
-        key="uploader_fondo"
-    )
-
-    if nuevo_fondo:
-        dest_path = ASSETS_DIR / "jungle.jpg"
-        with open(dest_path, "wb") as f:
-            f.write(nuevo_fondo.getbuffer())
-        st.success("✅ ¡Fondo actualizado con éxito! Recargando...")
+    # Subida de archivos
+    st.subheader("⬆️️ Subir Archivo al Servidor")
+    archivo_nuevo = st.file_uploader("Elige un archivo de código, documento o imagen", type=None)
+    if archivo_nuevo is not None:
+        ruta_destino = UPLOADS_DIR / archivo_nuevo.name
+        with open(ruta_destino, "wb") as f:
+            f.write(archivo_nuevo.getbuffer())
+        st.success(f"✅ ¡'{archivo_nuevo.name}' subido con éxito!")
         st.rerun()
 
     st.markdown("---")
-    st.subheader("📄 Archivos en el servidor")
-    archivos_guardados = list(UPLOADS_DIR.glob("*"))
-    if archivos_guardados:
-        for arc in archivos_guardados:
-            st.text(f"• {arc.name} ({round(arc.stat().st_size / 1024, 1)} KB)")
+
+    # Listado y Descarga de archivos
+    st.subheader("⬇️ Archivos Disponibles para Descargar")
+    archivos_servidor = sorted(list(UPLOADS_DIR.glob("*")), key=lambda x: x.stat().st_mtime, reverse=True)
+
+    if archivos_servidor:
+        for arc in archivos_servidor:
+            col_info, col_down, col_del = st.columns([3, 1, 1])
+            peso_kb = round(arc.stat().st_size / 1024, 1)
+            
+            with col_info:
+                st.markdown(f"📄 **{arc.name}**  \n<small style='color: #8da0b0;'>Tamaño: {peso_kb} KB</small>", unsafe_allow_html=True)
+            
+            with col_down:
+                try:
+                    with open(arc, "rb") as f_down:
+                        st.download_button(
+                            label="📥 Bajar",
+                            data=f_down,
+                            file_name=arc.name,
+                            key=f"down_{arc.name}",
+                            use_container_width=True
+                        )
+                except Exception:
+                    st.caption("Error")
+
+            with col_del:
+                if st.button("🗑️", key=f"del_{arc.name}", help=f"Eliminar {arc.name}"):
+                    try:
+                        arc.unlink()
+                        st.success(f"Eliminado: {arc.name}")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"No se pudo eliminar: {e}")
+            st.markdown("<hr style='margin: 8px 0; border: 0.5px solid rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
     else:
-        st.caption("No hay archivos subidos todavía.")
+        st.info("No hay archivos subidos todavía. Puedes subir tus scripts o documentos arriba.")
+
+    st.markdown("---")
+    st.subheader("🖼️ Personalizar Fondo")
+    nuevo_fondo = st.file_uploader("Subir imagen de fondo", type=["jpg", "jpeg", "png"], key="fondo_key")
+    if nuevo_fondo:
+        dest_fondo = ASSETS_DIR / "jungle.jpg"
+        with open(dest_fondo, "wb") as f:
+            f.write(nuevo_fondo.getbuffer())
+        st.success("✅ ¡Fondo actualizado!")
+        st.rerun()
 
 # =================================================
-# PESTAÑA 4: ⚙️ AJUSTES (CONFIGURACIÓN Y CAMBIO DE ALIAS)
+# PESTAÑA 4: ⚙️ AJUSTES
 # =================================================
 
 else:
@@ -521,17 +591,17 @@ else:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("🎨 Colores Generales")
+        st.subheader("🎨 Colores")
         st.session_state.theme_color = st.color_picker("Color Neón Principal", st.session_state.theme_color)
         st.session_state.secondary_color = st.color_picker("Color Secundario", st.session_state.secondary_color)
         st.session_state.text_color = st.color_picker("Color de Texto General", st.session_state.text_color)
 
     with col2:
-        st.subheader("👤 Tu Perfil de Usuario")
-        nuevo_alias = st.text_input("Cambiar tu alias en la sala:", value=st.session_state.user_name)
+        st.subheader("👤 Tu Perfil")
+        nuevo_alias = st.text_input("Cambiar tu alias:", value=st.session_state.user_name)
         if st.button("Guardar nuevo alias"):
             st.session_state.user_name = nuevo_alias.strip()
-            st.success(f"Alias cambiado a: {nuevo_alias}")
+            st.success(f"Alias actualizado a: {nuevo_alias}")
             st.rerun()
 
         st.session_state.font_size = st.slider("Tamaño de Fuente (px)", 12, 26, st.session_state.font_size)
@@ -561,8 +631,9 @@ else:
                 st.error(f"Error al guardar: {e}")
 
     with col_clear:
-        if st.button("🗑️ Borrar Historial de Chat", use_container_width=True):
+        if st.button("🗑️ Vaciar Historial Compartido", use_container_width=True):
+            if SHARED_CHAT_FILE.exists():
+                SHARED_CHAT_FILE.unlink()
             st.session_state.messages = []
-            st.session_state.room_messages = []
-            st.success("Historiales eliminados.")
+            st.success("Historiales vaciados por completo.")
             st.rerun()
