@@ -69,11 +69,19 @@ def image_to_base64(path: Path) -> str:
         return ""
 
 def get_background_css() -> str:
-    for ext in [".jpg", ".png", ".jpeg"]:
-        fondo = ASSETS_DIR / f"jungle{ext}"
-        if fondo.exists():
-            b64 = image_to_base64(fondo)
-            mime = "png" if ext == ".png" else "jpeg"
+    # Buscar mono.jpg o jungle.jpg tanto en la raíz como en assets
+    posibles_rutas = [
+        BASE_DIR / "mono.jpg",
+        BASE_DIR / "mono.png",
+        BASE_DIR / "mono.jpeg",
+        ASSETS_DIR / "mono.jpg",
+        ASSETS_DIR / "jungle.jpg",
+        BASE_DIR / "jungle.jpg"
+    ]
+    for ruta in posibles_rutas:
+        if ruta.exists():
+            b64 = image_to_base64(ruta)
+            mime = "png" if ruta.suffix.lower() == ".png" else "jpeg"
             return f'url("data:image/{mime};base64,{b64}")'
     return ""
 
