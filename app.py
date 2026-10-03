@@ -136,7 +136,7 @@ st.markdown(
     /* 1. Fondo de la app */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
-            linear-gradient(rgba(4, 10, 6, 0.88), rgba(6, 13, 9, 0.95)),
+            linear-gradient(rgba(4, 10, 6, 0.60), rgba(6, 13, 9, 0.60)),
             {bg_css if bg_css else "none"} !important;
         background-color: #060d09 !important;
         background-size: cover !important;
