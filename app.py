@@ -5,7 +5,6 @@ from datetime import datetime
 import os
 import json
 import base64
-import time
 from groq import Groq
 
 # =================================================
@@ -130,7 +129,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CON FONDO VISIBLE
+# ESTILOS CSS CON FONDO VISIBLE Y BARRA INFERIOR COMPACTA
 # =================================================
 
 bg_css = get_background_css()
@@ -138,7 +137,6 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* Fondo con transparencia optimizada para resaltar la imagen */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(4, 10, 6, 0.45), rgba(6, 13, 9, 0.60)),
@@ -164,31 +162,17 @@ st.markdown(
         font-size: 1.02rem !important;
     }}
 
-    [data-testid="stBottom"],
-    footer,
-    [data-testid="stBottom"] > div {{
-        background: transparent !important;
-        background-color: transparent !important;
-    }}
-
-    .stChatFloatingInputContainer,
-    [data-testid="stChatInput"],
-    .stChatInputContainer {{
-        background-color: #0d1a10 !important;
-        border: 1.8px solid {st.session_state.theme_color} !important;
-        border-radius: 18px !important;
-        box-shadow: 0 0 15px rgba(0, 255, 102, 0.3) !important;
-    }}
-
-    [data-testid="stChatInput"] textarea {{
-        background-color: #0d1a10 !important;
-        color: #ffffff !important;
-        font-size: 16px !important;
-        font-weight: 500 !important;
-        caret-color: {st.session_state.theme_color} !important;
-    }}
-    [data-testid="stChatInput"] textarea::placeholder {{
-        color: #728c7b !important;
+    /* Barra inferior estilo WhatsApp para entrada y micro */
+    .chat-bottom-bar {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: rgba(6, 13, 9, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 8px 15px 12px 15px;
+        z-index: 999;
+        border-top: 1px solid rgba(0, 255, 102, 0.2);
     }}
 
     [data-testid="stChatMessage"] {{
@@ -327,7 +311,7 @@ with st.sidebar:
     )
 
 # =================================================
-# LLAMADAS GROQ (CHAT Y TRANSCRIPCIÓN DE AUDIO)
+# LLAMADAS GROQ (SOLO MODELOS ACTIVOS)
 # =================================================
 
 def llamar_a_groq(historial_mensajes):
@@ -349,11 +333,10 @@ def llamar_a_groq(historial_mensajes):
                 txt = txt[:12000] + "\n\n[... Truncado ...]"
             historial.append({"role": m.get("role", "user"), "content": txt})
 
+    # Modelos 100% operativos en Groq (eliminado mixtral obsoleto)
     modelos = [
         "llama-3.3-70b-versatile",
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768"
+        "llama-3.1-8b-instant"
     ]
 
     stream = None
@@ -398,11 +381,11 @@ def transcribir_audio(audio_bytes):
             temp_audio.unlink()
         return transcripcion.text
     except Exception as e:
-        st.error(f"Error procesando voz con Groq Whisper: {e}")
+        st.error(f"Error procesando audio: {e}")
         return None
 
 # =================================================
-# PESTAÑA 1: 💬 KINGKONG CHAT (IA PURA + VOZ)
+# PESTAÑA 1: 💬 KINGKONG CHAT
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -422,20 +405,30 @@ if menu == "💬 KingKong Chat":
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Grabar nota de voz opcional
-    with st.expander("🎙️ Grabar Nota de Voz a KingKong"):
-        audio_grabado = st.audio_input("Habla para consultar a la IA")
-        if audio_grabado:
-            texto_voz = transcribir_audio(audio_grabado.getvalue())
-            if texto_voz:
-                st.session_state.messages.append({"role": "user", "content": f"🎙️ {texto_voz}"})
-                with st.chat_message("user", avatar="👤"):
-                    st.markdown(f"🎙️ *{texto_voz}*")
-                with st.chat_message("assistant", avatar="🦍"):
-                    resp = llamar_a_groq(st.session_state.messages)
-                st.session_state.messages.append({"role": "assistant", "content": resp})
+    # Barra inferior fija integrada: Texto + Micrófono
+    st.markdown("<div style='height: 90px;'></div>", unsafe_allow_html=True)
+    
+    col_input, col_mic = st.columns([5, 1])
+    with col_input:
+        prompt = st.chat_input("Escribe a KingKong...")
+    with col_mic:
+        audio_grabado = st.audio_input("🎙️", key="mic_chat", label_visibility="collapsed")
 
-    if prompt := st.chat_input("Escribe a KingKong..."):
+    # Si se graba audio con el micro
+    if audio_grabado:
+        with st.spinner("Transcribiendo audio..."):
+            texto_voz = transcribir_audio(audio_grabado.getvalue())
+        if texto_voz:
+            st.session_state.messages.append({"role": "user", "content": f"🎙️ {texto_voz}"})
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(f"🎙️ *{texto_voz}*")
+            with st.chat_message("assistant", avatar="🦍"):
+                resp = llamar_a_groq(st.session_state.messages)
+            st.session_state.messages.append({"role": "assistant", "content": resp})
+            st.rerun()
+
+    # Si se escribe texto
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
@@ -446,7 +439,7 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PESTAÑA 2: 👥 SALA CON AUTO-REFRESCO, VOZ Y MENCIÓN @IA
+# PESTAÑA 2: 👥 SALA DE GRUPO
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
@@ -470,8 +463,7 @@ elif menu == "👥 Sala de Conversación":
                     st.rerun()
         st.stop()
 
-    # Barra superior con autorefresco
-    col_t1, col_t2, col_t3 = st.columns([2.5, 1, 0.8])
+    col_t1, col_t2 = st.columns([3, 1])
     with col_t1:
         st.markdown(
             f"""
@@ -483,46 +475,17 @@ elif menu == "👥 Sala de Conversación":
             unsafe_allow_html=True
         )
     with col_t2:
-        auto_sync = st.toggle("🔄 Auto-sincronizar", value=True, help="Refresca mensajes en vivo cada 4 segundos")
-    with col_t3:
-        if st.button("🔄 Manual"):
+        if st.button("🔄 Actualizar"):
             st.rerun()
-
-    # Temporizador de auto-refresco
-    if auto_sync:
-        components.html(
-            """
-            <script>
-                setTimeout(function() {
-                    window.parent.document.querySelector('button[kind="secondaryFormSubmit"], button:has(div:contains("Manual"))')?.click();
-                }, 4000);
-            </script>
-            """,
-            height=0
-        )
 
     col_tgl, col_info = st.columns([1, 2])
     with col_tgl:
-        ia_en_grupo = st.toggle("🦍 Modo IA Permanente", value=False)
+        ia_en_grupo = st.toggle("🦍 Modo IA Fijo", value=False)
     with col_info:
         if ia_en_grupo:
-            st.caption("🟢 **IA PERMANENTE:** Responde a cada intervención.")
+            st.caption("🟢 **IA PERMANENTE:** Responde a todos los mensajes.")
         else:
-            st.caption("💡 **TIP:** Menciona **@ia** o **@kingkong** en tu mensaje para llamarla solo cuando quieras.")
-
-    # Notas de voz en la sala
-    with st.expander("🎙️️ Enviar Nota de Voz a la Sala"):
-        audio_sala = st.audio_input("Graba tu mensaje de voz para el grupo")
-        if audio_sala:
-            texto_transcrito = transcribir_audio(audio_sala.getvalue())
-            if texto_transcrito:
-                guardar_mensaje_compartido({
-                    "user": st.session_state.user_name,
-                    "role": "user",
-                    "time": datetime.now().strftime("%H:%M"),
-                    "text": f"🎙️ *[Audio]:* {texto_transcrito}"
-                })
-                st.rerun()
+            st.caption("💡 Menciona **@ia** o **@kingkong** para llamarla solo cuando quieras.")
 
     mensajes_sala = cargar_mensajes_compartidos()
 
@@ -538,7 +501,30 @@ elif menu == "👥 Sala de Conversación":
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    if texto_grupo := st.chat_input("Escribe al grupo (usa @ia para consultarle)..."):
+    st.markdown("<div style='height: 90px;'></div>", unsafe_allow_html=True)
+
+    # Barra inferior fija integrada: Texto + Micrófono en la sala
+    col_input_s, col_mic_s = st.columns([5, 1])
+    with col_input_s:
+        texto_grupo = st.chat_input("Escribe al grupo (o usa @ia)...")
+    with col_mic_s:
+        audio_sala = st.audio_input("🎙️", key="mic_sala", label_visibility="collapsed")
+
+    # Si se envía audio en la sala
+    if audio_sala:
+        with st.spinner("Transcribiendo voz..."):
+            texto_transcrito = transcribir_audio(audio_sala.getvalue())
+        if texto_transcrito:
+            guardar_mensaje_compartido({
+                "user": st.session_state.user_name,
+                "role": "user",
+                "time": datetime.now().strftime("%H:%M"),
+                "text": f"🎙️ *[Audio]:* {texto_transcrito}"
+            })
+            st.rerun()
+
+    # Si se envía texto en la sala
+    if texto_grupo:
         hora_envio = datetime.now().strftime("%H:%M")
         
         guardar_mensaje_compartido({
@@ -619,7 +605,6 @@ elif menu == "📁 Archivos":
                     except Exception as e:
                         st.error(f"No se pudo eliminar: {e}")
 
-            # Visor expandible en pantalla
             if ver:
                 if extension in [".py", ".mq5", ".pine", ".json", ".txt", ".csv", ".html", ".js", ".css"]:
                     try:
