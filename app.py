@@ -60,7 +60,7 @@ def guardar_mensaje_compartido(nuevo_msg):
         with open(SHARED_CHAT_FILE, "w", encoding="utf-8") as f:
             json.dump(mensajes, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        st.error(f"Error al sincronizar: {e}")
+        st.error(f"Error al sincronizar mensaje: {e}")
 
 # =================================================
 # PERSISTENCIA Y DETECCIÓN DE FONDO
@@ -129,7 +129,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CON FONDO VISIBLE
+# ESTILOS CSS CON FONDO VISIBLE Y MICRÓFONO INTEGRADO
 # =================================================
 
 bg_css = get_background_css()
@@ -137,7 +137,6 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* Fondo limpio y nítido para ver el gorila */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
             linear-gradient(rgba(4, 10, 6, 0.40), rgba(6, 13, 9, 0.55)),
@@ -163,7 +162,6 @@ st.markdown(
         font-size: 1.02rem !important;
     }}
 
-    /* Barra inferior estilo Telegram / WhatsApp fija */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -176,8 +174,9 @@ st.markdown(
     .stChatInputContainer {{
         background-color: #0d1a10 !important;
         border: 1.8px solid {st.session_state.theme_color} !important;
-        border-radius: 20px !important;
+        border-radius: 24px !important;
         box-shadow: 0 0 15px rgba(0, 255, 102, 0.35) !important;
+        padding-right: 48px !important;
     }}
 
     [data-testid="stChatInput"] textarea {{
@@ -327,44 +326,55 @@ with st.sidebar:
     )
 
 # =================================================
-# LLAMADAS GROQ CON AUTO-DETECCIÓN DINÁMICA DE MODELOS
+# LLAMADAS GROQ CON AUTO-DETECCIÓN DINÁMICA
 # =================================================
 
-def obtener_modelo_activo():
-    """Consulta en tiempo real a Groq qué modelo está encendido para tu cuenta."""
+def obtener_modelo_activo(para_vision=False):
+    """Consulta en directo a la API de Groq para seleccionar un modelo disponible."""
     try:
         modelos_disponibles = [m.id for m in client.models.list().data]
-        # Lista en orden de calidad que queremos probar
-        prioridades = [
+        if para_vision:
+            preferencias_vision = [
+                "qwen/qwen3.8-27b",
+                "llama-3.2-11b-vision-preview",
+                "llama-3.2-90b-vision-preview"
+            ]
+            for p in preferencias_vision:
+                if p in modelos_disponibles:
+                    return p
+
+        preferencias = [
             "llama-3.3-70b-versatile",
-            "llama3-70b-8192",
-            "llama-3.1-70b-versatile",
-            "llama3-8b-8192",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "qwen/qwen3-32b",
+            "llama-3.1-8b-instant",
             "gemma2-9b-it"
         ]
-        for p in prioridades:
+        for p in preferencias:
             if p in modelos_disponibles:
                 return p
-        # Si ninguno de los preferidos coincide, usamos el primer modelo de texto activo
         for m in modelos_disponibles:
             if not any(bad in m for bad in ["whisper", "guard", "safeguard", "orpheus"]):
                 return m
     except Exception:
         pass
-    # Modelo comodín más estable de Groq
     return "llama-3.3-70b-versatile"
 
-def llamar_a_groq(historial_mensajes):
+def llamar_a_groq(historial_mensajes, imagen_b64=None):
+    modelo_elegido = obtener_modelo_activo(para_vision=bool(imagen_b64))
     historial = [
         {
             "role": "system",
             "content": (
                 "Eres KingKong IA, un asistente avanzado, conciso y de alto rendimiento. "
-                "Eres analítico, profesional y experto en trading, mercados financieros y tecnología. "
+                "Eres analítico, profesional y experto en trading, mercados financieros, tecnología y visión artificial. "
                 "Responde siempre en español de forma estructurada y precisa."
             )
         }
     ]
+
     ultimos = historial_mensajes[-8:]
     for m in ultimos:
         txt = (m.get("content") or m.get("text") or "").strip()
@@ -373,7 +383,16 @@ def llamar_a_groq(historial_mensajes):
                 txt = txt[:12000] + "\n\n[... Truncado ...]"
             historial.append({"role": m.get("role", "user"), "content": txt})
 
-    modelo_elegido = obtener_modelo_activo()
+    # Si se adjunta imagen a la consulta
+    if imagen_b64:
+        ultimo_usr = historial[-1]["content"] if historial and historial[-1]["role"] == "user" else "Describe esta imagen"
+        historial[-1] = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": ultimo_usr},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{imagen_b64}"}}
+            ]
+        }
 
     try:
         stream = client.chat.completions.create(
@@ -394,6 +413,92 @@ def llamar_a_groq(historial_mensajes):
         return err_msg
 
 # =================================================
+# INYECTOR DEL BOTÓN DE MICRÓFONO DENTRO DEL INPUT
+# =================================================
+
+def render_mic_telegram():
+    components.html(
+        f"""
+        <style>
+            #tg-mic {{
+                position: fixed;
+                bottom: 18px;
+                right: 56px;
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: {st.session_state.theme_color};
+                border: none;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 17px;
+                box-shadow: 0 0 10px rgba(0, 255, 102, 0.45);
+                z-index: 9999999;
+                transition: transform 0.15s ease, background 0.2s ease;
+            }}
+            #tg-mic:active {{
+                transform: scale(0.9);
+            }}
+            #tg-mic.recording {{
+                background: #ff3333 !important;
+                box-shadow: 0 0 16px rgba(255, 50, 50, 0.8) !important;
+                animation: tg_pulse 1s infinite;
+            }}
+            @keyframes tg_pulse {{
+                0% {{ transform: scale(1); }}
+                50% {{ transform: scale(1.12); }}
+                100% {{ transform: scale(1); }}
+            }}
+        </style>
+        <button id="tg-mic" title="Hablar por voz">🎙️</button>
+        <script>
+            const micBtn = document.getElementById('tg-mic');
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRec) {{
+                const rec = new SpeechRec();
+                rec.lang = 'es-ES';
+                rec.continuous = false;
+                rec.interimResults = false;
+                let active = false;
+
+                micBtn.addEventListener('click', () => {{
+                    if (!active) {{
+                        rec.start();
+                    }} else {{
+                        rec.stop();
+                    }}
+                }});
+
+                rec.onstart = () => {{
+                    active = true;
+                    micBtn.classList.add('recording');
+                }};
+                rec.onend = () => {{
+                    active = false;
+                    micBtn.classList.remove('recording');
+                }};
+                rec.onresult = (e) => {{
+                    const phrase = e.results[0][0].transcript;
+                    const doc = window.parent.document;
+                    const area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+                    if (area) {{
+                        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                        setter.call(area, phrase);
+                        area.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        area.focus();
+                    }}
+                }};
+            }} else {{
+                micBtn.style.display = 'none';
+            }}
+        </script>
+        """,
+        height=0
+    )
+
+# =================================================
 # PESTAÑA 1: 💬 KINGKONG CHAT
 # =================================================
 
@@ -412,16 +517,31 @@ if menu == "💬 KingKong Chat":
     for msg in st.session_state.messages:
         avatar = "🦍" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
-            st.markdown(msg["content"])
+            if msg.get("image"):
+                st.image(f"data:image/jpeg;base64,{msg['image']}", width=320)
+            if msg.get("content"):
+                st.markdown(msg["content"])
 
-    # Barra única integrada estilo Telegram / WhatsApp fija abajo
-    if prompt := st.chat_input("Escribe o pulsa el micro de tu teclado para hablar..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    # Adjuntar Foto o GIF a KingKong
+    with st.expander("📎 Adjuntar Foto o GIF para KingKong", expanded=False):
+        foto_subida = st.file_uploader("Sube una imagen o captura", type=["jpg", "jpeg", "png", "gif", "webp"], key="foto_ia")
+
+    # Inyección del botón de micrófono en la barra
+    render_mic_telegram()
+
+    if prompt := st.chat_input("Escribe a KingKong (o pulsa 🎙️ para dictar)..."):
+        img_b64 = None
+        if foto_subida:
+            img_b64 = base64.b64encode(foto_subida.read()).decode()
+
+        st.session_state.messages.append({"role": "user", "content": prompt, "image": img_b64})
         with st.chat_message("user", avatar="👤"):
+            if img_b64:
+                st.image(f"data:image/jpeg;base64,{img_b64}", width=320)
             st.markdown(prompt)
 
         with st.chat_message("assistant", avatar="🦍"):
-            full_response = llamar_a_groq(st.session_state.messages)
+            full_response = llamar_a_groq(st.session_state.messages, imagen_b64=img_b64)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
@@ -485,10 +605,29 @@ elif menu == "👥 Sala de Conversación":
             color_autor = st.session_state.theme_color if es_ia else ("#00FF66" if es_propio else "#58a6ff")
             nombre_mostrar = "Tú" if es_propio else msg['user']
             st.markdown(f"<span style='color: {color_autor}; font-weight: bold;'>{nombre_mostrar}</span> <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
+            if msg.get("image"):
+                st.image(f"data:image/jpeg;base64,{msg['image']}", width=280)
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    if texto_grupo := st.chat_input("Escribe al grupo (o usa @ia)..."):
+    # Adjuntar Foto o GIF a la Sala
+    with st.expander("📷 Enviar Foto o GIF a la Sala", expanded=False):
+        foto_sala = st.file_uploader("Elige una foto o GIF para el grupo", type=["jpg", "jpeg", "png", "gif", "webp"], key="foto_sala_up")
+        if foto_sala is not None and st.button("📤 Enviar Imagen"):
+            img_b64 = base64.b64encode(foto_sala.read()).decode()
+            guardar_mensaje_compartido({
+                "user": st.session_state.user_name,
+                "role": "user",
+                "time": datetime.now().strftime("%H:%M"),
+                "text": "📷 *[Imagen compartida]*",
+                "image": img_b64
+            })
+            st.rerun()
+
+    # Inyección del botón de micrófono en la barra
+    render_mic_telegram()
+
+    if texto_grupo := st.chat_input("Escribe al grupo (usa @ia o pulsa 🎙️)..."):
         hora_envio = datetime.now().strftime("%H:%M")
         
         guardar_mensaje_compartido({
@@ -532,7 +671,7 @@ elif menu == "📁 Archivos":
 
     st.markdown("---")
 
-    st.subheader("⬇️️ Archivos y Scripts Disponibles")
+    st.subheader("⬇ Archivos y Scripts Disponibles")
     archivos_servidor = sorted(list(UPLOADS_DIR.glob("*")), key=lambda x: x.stat().st_mtime, reverse=True)
 
     if archivos_servidor:
@@ -577,7 +716,7 @@ elif menu == "📁 Archivos":
                         st.code(contenido, language="python" if extension in [".py", ".pine", ".mq5"] else None)
                     except Exception as e:
                         st.error(f"Error al leer: {e}")
-                elif extension in [".jpg", ".png", ".jpeg", ".webp"]:
+                elif extension in [".jpg", ".png", ".jpeg", ".webp", ".gif"]:
                     st.image(str(arc), width=380)
                 else:
                     st.info("Vista previa no soportada para este tipo de archivo binario.")
