@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import json
 import base64
+import time
 from groq import Groq
 
 # =================================================
@@ -22,20 +23,27 @@ BASE_DIR = Path(__file__).resolve().parent if "__file__" in locals() else Path.c
 ASSETS_DIR = BASE_DIR / "assets"
 UPLOADS_DIR = BASE_DIR / "uploads"
 CONFIG_FILE = BASE_DIR / "theme_config.json"
-SHARED_CHAT_FILE = BASE_DIR / "shared_chat_history.json"  # Buzón común compartido
+SHARED_CHAT_FILE = BASE_DIR / "shared_chat_history.json"
 
-ASSETS_DIR.mkdir(exist_ok=True)
-UPLOADS_DIR.mkdir(exist_ok=True)
+try:
+    if not ASSETS_DIR.exists():
+        ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
 
-# Límite de mensajes guardados en el buzón compartido (reciclaje automático)
+try:
+    if not UPLOADS_DIR.exists():
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
 MAX_MENSAJES_SALA = 200
 
 # =================================================
-# FUNCIONES DEL BUZÓN COMPARTIDO (AUTORRECICLADO)
+# HISTORIAL COMPARTIDO (AUTORRECICLABLE)
 # =================================================
 
 def cargar_mensajes_compartidos():
-    """Lee el historial compartido desde el disco del servidor."""
     if SHARED_CHAT_FILE.exists():
         try:
             with open(SHARED_CHAT_FILE, "r", encoding="utf-8") as f:
@@ -45,20 +53,18 @@ def cargar_mensajes_compartidos():
     return []
 
 def guardar_mensaje_compartido(nuevo_msg):
-    """Guarda el mensaje y recicla borrando los más viejos si supera el límite."""
     mensajes = cargar_mensajes_compartidos()
     mensajes.append(nuevo_msg)
-    # Si supera el tope, se queda con los últimos MAX_MENSAJES_SALA (los viejos se van)
     if len(mensajes) > MAX_MENSAJES_SALA:
         mensajes = mensajes[-MAX_MENSAJES_SALA:]
     try:
         with open(SHARED_CHAT_FILE, "w", encoding="utf-8") as f:
             json.dump(mensajes, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        st.error(f"Error al sincronizar mensaje: {e}")
+        st.error(f"Error al sincronizar: {e}")
 
 # =================================================
-# PERSISTENCIA DE CONFIGURACIÓN
+# PERSISTENCIA Y DETECCIÓN DE FONDO
 # =================================================
 
 def image_to_base64(path: Path) -> str:
@@ -69,8 +75,7 @@ def image_to_base64(path: Path) -> str:
         return ""
 
 def get_background_css() -> str:
-    # Buscar mono.jpg o jungle.jpg tanto en la raíz como en assets
-    posibles_rutas = [
+    rutas = [
         BASE_DIR / "mono.jpg",
         BASE_DIR / "mono.png",
         BASE_DIR / "mono.jpeg",
@@ -78,10 +83,10 @@ def get_background_css() -> str:
         ASSETS_DIR / "jungle.jpg",
         BASE_DIR / "jungle.jpg"
     ]
-    for ruta in posibles_rutas:
-        if ruta.exists():
-            b64 = image_to_base64(ruta)
-            mime = "png" if ruta.suffix.lower() == ".png" else "jpeg"
+    for r in rutas:
+        if r.exists():
+            b64 = image_to_base64(r)
+            mime = "png" if r.suffix.lower() == ".png" else "jpeg"
             return f'url("data:image/{mime};base64,{b64}")'
     return ""
 
@@ -113,7 +118,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # =================================================
-# CONEXIÓN CON GROQ
+# CONEXIÓN GROQ
 # =================================================
 
 GROQ_KEY = (
@@ -125,7 +130,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CORREGIDOS (TEXTOS BLANCOS + NEÓN)
+# ESTILOS CSS CON FONDO VISIBLE
 # =================================================
 
 bg_css = get_background_css()
@@ -133,10 +138,10 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
-    /* 1. Fondo de la app */
+    /* Fondo con transparencia optimizada para resaltar la imagen */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
-            linear-gradient(rgba(4, 10, 6, 0.60), rgba(6, 13, 9, 0.60)),
+            linear-gradient(rgba(4, 10, 6, 0.45), rgba(6, 13, 9, 0.60)),
             {bg_css if bg_css else "none"} !important;
         background-color: #060d09 !important;
         background-size: cover !important;
@@ -145,7 +150,6 @@ st.markdown(
         background-repeat: no-repeat !important;
     }}
 
-    /* 2. Barra lateral */
     section[data-testid="stSidebar"] {{
         background: linear-gradient(180deg, rgba(5, 16, 9, 0.98), rgba(8, 22, 13, 0.98)) !important;
         backdrop-filter: blur(15px);
@@ -160,7 +164,6 @@ st.markdown(
         font-size: 1.02rem !important;
     }}
 
-    /* 3. Entrada de texto fija: fondo oscuro y letras blancas visibles */
     [data-testid="stBottom"],
     footer,
     [data-testid="stBottom"] > div {{
@@ -188,10 +191,9 @@ st.markdown(
         color: #728c7b !important;
     }}
 
-    /* 4. Mensajes del chat */
     [data-testid="stChatMessage"] {{
-        background: rgba(14, 26, 17, 0.9) !important;
-        backdrop-filter: blur(14px);
+        background: rgba(14, 26, 17, 0.88) !important;
+        backdrop-filter: blur(12px);
         border: 1px solid rgba(0, 255, 102, 0.25) !important;
         border-radius: {st.session_state.radius}px !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
@@ -206,7 +208,6 @@ st.markdown(
         font-size: {st.session_state.font_size}px !important;
     }}
 
-    /* 5. Cajas de código */
     [data-testid="stChatMessage"] pre,
     [data-testid="stChatMessage"] div[data-testid="stCodeBlock"],
     [data-testid="stChatMessage"] pre > code {{
@@ -216,9 +217,8 @@ st.markdown(
         border-radius: 10px !important;
     }}
 
-    /* 6. Gorila con aura neón original */
     .gorila-original-aura {{
-        font-size: 5rem;
+        font-size: 4.8rem;
         display: inline-block;
         filter: drop-shadow(0 0 20px {st.session_state.theme_color}) drop-shadow(0 0 40px {st.session_state.theme_color}77);
         margin-bottom: 2px;
@@ -240,10 +240,9 @@ st.markdown(
         font-size: 0.75rem !important;
         font-weight: 600 !important;
         text-align: center;
-        margin-bottom: 22px;
+        margin-bottom: 18px;
     }}
 
-    /* Estilo del botón de descarga APK */
     [data-testid="stSidebar"] a[data-testid="baseButton-secondary"],
     div.stDownloadButton > button {{
         background: linear-gradient(135deg, {st.session_state.theme_color} 0%, #059669 100%) !important;
@@ -321,7 +320,6 @@ with st.sidebar:
         height=85
     )
 
-    # Botón directo hacia la descarga oficial en AppsGeyser
     st.link_button(
         label="📲 Descargar App Android (APK)",
         url="https://appsgeyser.io/20240166/KingKongChat",
@@ -329,7 +327,7 @@ with st.sidebar:
     )
 
 # =================================================
-# FUNCIÓN DE LLAMADA A GROQ
+# LLAMADAS GROQ (CHAT Y TRANSCRIPCIÓN DE AUDIO)
 # =================================================
 
 def llamar_a_groq(historial_mensajes):
@@ -343,38 +341,24 @@ def llamar_a_groq(historial_mensajes):
             )
         }
     ]
-    ultimos_mensajes = historial_mensajes[-8:]
-    for m in ultimos_mensajes:
+    ultimos = historial_mensajes[-8:]
+    for m in ultimos:
         txt = (m.get("content") or m.get("text") or "").strip()
         if txt and not txt.startswith("⚠️"):
             if len(txt) > 12000:
                 txt = txt[:12000] + "\n\n[... Truncado ...]"
             historial.append({"role": m.get("role", "user"), "content": txt})
 
-    candidatos = []
-    try:
-        modelos_remotos = client.models.list().data
-        for mod in modelos_remotos:
-            m_id = mod.id.lower()
-            if any(bad in m_id for bad in ["whisper", "guard", "orpheus", "safeguard"]):
-                continue
-            candidatos.append(mod.id)
-    except Exception:
-        pass
-
-    prioritarios = [
+    modelos = [
         "llama-3.3-70b-versatile",
         "llama-3.1-70b-versatile",
         "llama-3.1-8b-instant",
         "mixtral-8x7b-32768"
     ]
-    lista_final = [m for m in prioritarios if m in candidatos] + [m for m in candidatos if m not in prioritarios]
-    if not lista_final:
-        lista_final = prioritarios
 
     stream = None
     ultimo_error = None
-    for m_id in lista_final:
+    for m_id in modelos:
         try:
             stream = client.chat.completions.create(
                 model=m_id,
@@ -399,8 +383,26 @@ def llamar_a_groq(historial_mensajes):
         st.error(err_msg)
         return err_msg
 
+def transcribir_audio(audio_bytes):
+    try:
+        temp_audio = BASE_DIR / "temp_audio.wav"
+        with open(temp_audio, "wb") as f:
+            f.write(audio_bytes)
+        with open(temp_audio, "rb") as f_aud:
+            transcripcion = client.audio.transcriptions.create(
+                file=("audio.wav", f_aud.read()),
+                model="whisper-large-v3",
+                language="es"
+            )
+        if temp_audio.exists():
+            temp_audio.unlink()
+        return transcripcion.text
+    except Exception as e:
+        st.error(f"Error procesando voz con Groq Whisper: {e}")
+        return None
+
 # =================================================
-# PESTAÑA 1: 💬 KINGKONG CHAT (IA PURA)
+# PESTAÑA 1: 💬 KINGKONG CHAT (IA PURA + VOZ)
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -420,6 +422,19 @@ if menu == "💬 KingKong Chat":
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
+    # Grabar nota de voz opcional
+    with st.expander("🎙️ Grabar Nota de Voz a KingKong"):
+        audio_grabado = st.audio_input("Habla para consultar a la IA")
+        if audio_grabado:
+            texto_voz = transcribir_audio(audio_grabado.getvalue())
+            if texto_voz:
+                st.session_state.messages.append({"role": "user", "content": f"🎙️ {texto_voz}"})
+                with st.chat_message("user", avatar="👤"):
+                    st.markdown(f"🎙️ *{texto_voz}*")
+                with st.chat_message("assistant", avatar="🦍"):
+                    resp = llamar_a_groq(st.session_state.messages)
+                st.session_state.messages.append({"role": "assistant", "content": resp})
+
     if prompt := st.chat_input("Escribe a KingKong..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
@@ -431,11 +446,10 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PESTAÑA 2: 👥 SALA DE GRUPO CON BUZÓN COMPARTIDO Y RECICLADO
+# PESTAÑA 2: 👥 SALA CON AUTO-REFRESCO, VOZ Y MENCIÓN @IA
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
-    # 1. Solicitar alias si aún no lo tiene configurado
     if not st.session_state.user_name:
         st.markdown(
             f"""
@@ -449,40 +463,67 @@ elif menu == "👥 Sala de Conversación":
         )
         col_c1, col_c2, col_c3 = st.columns([1, 2, 1])
         with col_c2:
-            alias_temp = st.text_input("Tu Nombre / Alias:", placeholder="Ej: Mono Blanco, Alex...")
+            alias_temp = st.text_input("Tu Nombre / Alias:", placeholder="Ej: Alex, Trader...")
             if st.button("🚀 Entrar al Chat", use_container_width=True):
                 if alias_temp.strip():
                     st.session_state.user_name = alias_temp.strip()
                     st.rerun()
         st.stop()
 
-    # 2. Cabecera limpia y botón para refrescar mensajes si el colega escribió
-    col_t1, col_t2 = st.columns([3, 1])
+    # Barra superior con autorefresco
+    col_t1, col_t2, col_t3 = st.columns([2.5, 1, 0.8])
     with col_t1:
         st.markdown(
             f"""
-            <div style="padding-bottom: 5px;">
-                <span style="font-size: 1.5rem; font-weight: 800; color: {st.session_state.theme_color};">👥 SALA DE GRUPO</span>
-                <span style="font-size: 0.8rem; color: #8da0b0; margin-left: 10px;">Tú: <b style="color: #fff;">{st.session_state.user_name}</b></span>
+            <div style="padding-bottom: 2px;">
+                <span style="font-size: 1.4rem; font-weight: 800; color: {st.session_state.theme_color};">👥 SALA DE GRUPO</span>
+                <span style="font-size: 0.85rem; color: #8da0b0; margin-left: 10px;">Tú: <b style="color: #fff;">{st.session_state.user_name}</b></span>
             </div>
             """,
             unsafe_allow_html=True
         )
     with col_t2:
-        if st.button("🔄 Actualizar", help="Cargar nuevos mensajes del grupo"):
+        auto_sync = st.toggle("🔄 Auto-sincronizar", value=True, help="Refresca mensajes en vivo cada 4 segundos")
+    with col_t3:
+        if st.button("🔄 Manual"):
             st.rerun()
 
-    # Interruptor para activar la IA en el grupo
+    # Temporizador de auto-refresco
+    if auto_sync:
+        components.html(
+            """
+            <script>
+                setTimeout(function() {
+                    window.parent.document.querySelector('button[kind="secondaryFormSubmit"], button:has(div:contains("Manual"))')?.click();
+                }, 4000);
+            </script>
+            """,
+            height=0
+        )
+
     col_tgl, col_info = st.columns([1, 2])
     with col_tgl:
-        ia_en_grupo = st.toggle("🦍 IA Activa en Grupo", value=False)
+        ia_en_grupo = st.toggle("🦍 Modo IA Permanente", value=False)
     with col_info:
         if ia_en_grupo:
-            st.caption("🟢 **IA CONECTADA:** Responderá tras los mensajes.")
+            st.caption("🟢 **IA PERMANENTE:** Responde a cada intervención.")
         else:
-            st.caption("⚪ **IA EN SILENCIO:** Modo charla privada entre compañeros.")
+            st.caption("💡 **TIP:** Menciona **@ia** o **@kingkong** en tu mensaje para llamarla solo cuando quieras.")
 
-    # 3. Cargar historial del buzón compartido en disco
+    # Notas de voz en la sala
+    with st.expander("🎙️️ Enviar Nota de Voz a la Sala"):
+        audio_sala = st.audio_input("Graba tu mensaje de voz para el grupo")
+        if audio_sala:
+            texto_transcrito = transcribir_audio(audio_sala.getvalue())
+            if texto_transcrito:
+                guardar_mensaje_compartido({
+                    "user": st.session_state.user_name,
+                    "role": "user",
+                    "time": datetime.now().strftime("%H:%M"),
+                    "text": f"🎙️ *[Audio]:* {texto_transcrito}"
+                })
+                st.rerun()
+
     mensajes_sala = cargar_mensajes_compartidos()
 
     for msg in mensajes_sala:
@@ -497,11 +538,9 @@ elif menu == "👥 Sala de Conversación":
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    # 4. Input inferior tipo Telegram con Enter directo
-    if texto_grupo := st.chat_input("Escribe al grupo y pulsa Enter..."):
+    if texto_grupo := st.chat_input("Escribe al grupo (usa @ia para consultarle)..."):
         hora_envio = datetime.now().strftime("%H:%M")
         
-        # Guardar en el buzón compartido (auto-reciclable a los 200 mensajes)
         guardar_mensaje_compartido({
             "user": st.session_state.user_name,
             "role": "user",
@@ -509,8 +548,9 @@ elif menu == "👥 Sala de Conversación":
             "text": texto_grupo
         })
 
-        # Si el interruptor está activo, la IA lee la sala y responde
-        if ia_en_grupo:
+        debe_responder_ia = ia_en_grupo or ("@ia" in texto_grupo.lower()) or ("@kingkong" in texto_grupo.lower())
+
+        if debe_responder_ia:
             with st.spinner("🦍 KingKong IA respondiendo..."):
                 historial_actual = cargar_mensajes_compartidos()
                 formato_ia = [{"role": m.get("role", "user"), "content": m.get("text", "")} for m in historial_actual]
@@ -525,15 +565,14 @@ elif menu == "👥 Sala de Conversación":
         st.rerun()
 
 # =================================================
-# PESTAÑA 3: 📁 ARCHIVOS CON MODO SUBIDA Y DESCARGA
+# PESTAÑA 3: 📁 ARCHIVOS CON VISOR DE CÓDIGO
 # =================================================
 
 elif menu == "📁 Archivos":
-    st.markdown(f"<h2 style='color: {st.session_state.theme_color};'>📁 Gestor de Archivos y Scripts</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: {st.session_state.theme_color};'>📁 Gestor y Visor de Archivos</h2>", unsafe_allow_html=True)
 
-    # Subida de archivos
     st.subheader("⬆ Subir Archivo al Servidor")
-    archivo_nuevo = st.file_uploader("Elige un archivo de código, documento o imagen", type=None)
+    archivo_nuevo = st.file_uploader("Elige código (.py, .mq5, .pine), documento o imagen", type=None)
     if archivo_nuevo is not None:
         ruta_destino = UPLOADS_DIR / archivo_nuevo.name
         with open(ruta_destino, "wb") as f:
@@ -543,18 +582,21 @@ elif menu == "📁 Archivos":
 
     st.markdown("---")
 
-    # Listado y Descarga de archivos
-    st.subheader("⬇️ Archivos Disponibles para Descargar")
+    st.subheader("⬇️ Archivos y Scripts Disponibles")
     archivos_servidor = sorted(list(UPLOADS_DIR.glob("*")), key=lambda x: x.stat().st_mtime, reverse=True)
 
     if archivos_servidor:
         for arc in archivos_servidor:
-            col_info, col_down, col_del = st.columns([3, 1, 1])
+            col_info, col_view, col_down, col_del = st.columns([3, 1, 1, 0.7])
             peso_kb = round(arc.stat().st_size / 1024, 1)
+            extension = arc.suffix.lower()
             
             with col_info:
                 st.markdown(f"📄 **{arc.name}**  \n<small style='color: #8da0b0;'>Tamaño: {peso_kb} KB</small>", unsafe_allow_html=True)
             
+            with col_view:
+                ver = st.checkbox("👁️ Ver", key=f"v_{arc.name}")
+
             with col_down:
                 try:
                     with open(arc, "rb") as f_down:
@@ -576,15 +618,30 @@ elif menu == "📁 Archivos":
                         st.rerun()
                     except Exception as e:
                         st.error(f"No se pudo eliminar: {e}")
+
+            # Visor expandible en pantalla
+            if ver:
+                if extension in [".py", ".mq5", ".pine", ".json", ".txt", ".csv", ".html", ".js", ".css"]:
+                    try:
+                        with open(arc, "r", encoding="utf-8", errors="ignore") as f_code:
+                            contenido = f_code.read()
+                        st.code(contenido, language="python" if extension in [".py", ".pine", ".mq5"] else None)
+                    except Exception as e:
+                        st.error(f"Error al leer: {e}")
+                elif extension in [".jpg", ".png", ".jpeg", ".webp"]:
+                    st.image(str(arc), width=380)
+                else:
+                    st.info("Vista previa no soportada para este tipo de archivo binario.")
+
             st.markdown("<hr style='margin: 8px 0; border: 0.5px solid rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
     else:
         st.info("No hay archivos subidos todavía. Puedes subir tus scripts o documentos arriba.")
 
     st.markdown("---")
-    st.subheader("🖼️ Personalizar Fondo")
+    st.subheader("🖼️ Actualizar Foto de Fondo")
     nuevo_fondo = st.file_uploader("Subir imagen de fondo", type=["jpg", "jpeg", "png"], key="fondo_key")
     if nuevo_fondo:
-        dest_fondo = ASSETS_DIR / "jungle.jpg"
+        dest_fondo = BASE_DIR / "mono.jpg"
         with open(dest_fondo, "wb") as f:
             f.write(nuevo_fondo.getbuffer())
         st.success("✅ ¡Fondo actualizado!")
