@@ -129,7 +129,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CON FONDO VISIBLE Y BARRA INFERIOR COMPACTA
+# ESTILOS CSS CON FONDO VISIBLE
 # =================================================
 
 bg_css = get_background_css()
@@ -137,9 +137,10 @@ bg_css = get_background_css()
 st.markdown(
     f"""
     <style>
+    /* Fondo limpio y nítido para ver el gorila */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stMain"] {{
         background-image: 
-            linear-gradient(rgba(4, 10, 6, 0.45), rgba(6, 13, 9, 0.60)),
+            linear-gradient(rgba(4, 10, 6, 0.40), rgba(6, 13, 9, 0.55)),
             {bg_css if bg_css else "none"} !important;
         background-color: #060d09 !important;
         background-size: cover !important;
@@ -162,17 +163,32 @@ st.markdown(
         font-size: 1.02rem !important;
     }}
 
-    /* Barra inferior estilo WhatsApp para entrada y micro */
-    .chat-bottom-bar {{
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background: rgba(6, 13, 9, 0.95);
-        backdrop-filter: blur(10px);
-        padding: 8px 15px 12px 15px;
-        z-index: 999;
-        border-top: 1px solid rgba(0, 255, 102, 0.2);
+    /* Barra inferior estilo Telegram / WhatsApp fija */
+    [data-testid="stBottom"],
+    footer,
+    [data-testid="stBottom"] > div {{
+        background: transparent !important;
+        background-color: transparent !important;
+    }}
+
+    .stChatFloatingInputContainer,
+    [data-testid="stChatInput"],
+    .stChatInputContainer {{
+        background-color: #0d1a10 !important;
+        border: 1.8px solid {st.session_state.theme_color} !important;
+        border-radius: 20px !important;
+        box-shadow: 0 0 15px rgba(0, 255, 102, 0.35) !important;
+    }}
+
+    [data-testid="stChatInput"] textarea {{
+        background-color: #0d1a10 !important;
+        color: #ffffff !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        caret-color: {st.session_state.theme_color} !important;
+    }}
+    [data-testid="stChatInput"] textarea::placeholder {{
+        color: #728c7b !important;
     }}
 
     [data-testid="stChatMessage"] {{
@@ -311,8 +327,32 @@ with st.sidebar:
     )
 
 # =================================================
-# LLAMADAS GROQ (SOLO MODELOS ACTIVOS)
+# LLAMADAS GROQ CON AUTO-DETECCIÓN DINÁMICA DE MODELOS
 # =================================================
+
+def obtener_modelo_activo():
+    """Consulta en tiempo real a Groq qué modelo está encendido para tu cuenta."""
+    try:
+        modelos_disponibles = [m.id for m in client.models.list().data]
+        # Lista en orden de calidad que queremos probar
+        prioridades = [
+            "llama-3.3-70b-versatile",
+            "llama3-70b-8192",
+            "llama-3.1-70b-versatile",
+            "llama3-8b-8192",
+            "gemma2-9b-it"
+        ]
+        for p in prioridades:
+            if p in modelos_disponibles:
+                return p
+        # Si ninguno de los preferidos coincide, usamos el primer modelo de texto activo
+        for m in modelos_disponibles:
+            if not any(bad in m for bad in ["whisper", "guard", "safeguard", "orpheus"]):
+                return m
+    except Exception:
+        pass
+    # Modelo comodín más estable de Groq
+    return "llama-3.3-70b-versatile"
 
 def llamar_a_groq(historial_mensajes):
     historial = [
@@ -333,27 +373,14 @@ def llamar_a_groq(historial_mensajes):
                 txt = txt[:12000] + "\n\n[... Truncado ...]"
             historial.append({"role": m.get("role", "user"), "content": txt})
 
-    # Modelos 100% operativos en Groq (eliminado mixtral obsoleto)
-    modelos = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant"
-    ]
+    modelo_elegido = obtener_modelo_activo()
 
-    stream = None
-    ultimo_error = None
-    for m_id in modelos:
-        try:
-            stream = client.chat.completions.create(
-                model=m_id,
-                messages=historial,
-                stream=True
-            )
-            break
-        except Exception as e:
-            ultimo_error = e
-            continue
-
-    if stream is not None:
+    try:
+        stream = client.chat.completions.create(
+            model=modelo_elegido,
+            messages=historial,
+            stream=True
+        )
         def stream_text():
             for chunk in stream:
                 if chunk.choices and len(chunk.choices) > 0:
@@ -361,28 +388,10 @@ def llamar_a_groq(historial_mensajes):
                     if content:
                         yield content
         return st.write_stream(stream_text())
-    else:
-        err_msg = f"⚠️ Error en Groq: {ultimo_error}"
+    except Exception as e:
+        err_msg = f"⚠️ Error en Groq ({modelo_elegido}): {e}"
         st.error(err_msg)
         return err_msg
-
-def transcribir_audio(audio_bytes):
-    try:
-        temp_audio = BASE_DIR / "temp_audio.wav"
-        with open(temp_audio, "wb") as f:
-            f.write(audio_bytes)
-        with open(temp_audio, "rb") as f_aud:
-            transcripcion = client.audio.transcriptions.create(
-                file=("audio.wav", f_aud.read()),
-                model="whisper-large-v3",
-                language="es"
-            )
-        if temp_audio.exists():
-            temp_audio.unlink()
-        return transcripcion.text
-    except Exception as e:
-        st.error(f"Error procesando audio: {e}")
-        return None
 
 # =================================================
 # PESTAÑA 1: 💬 KINGKONG CHAT
@@ -405,30 +414,8 @@ if menu == "💬 KingKong Chat":
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
 
-    # Barra inferior fija integrada: Texto + Micrófono
-    st.markdown("<div style='height: 90px;'></div>", unsafe_allow_html=True)
-    
-    col_input, col_mic = st.columns([5, 1])
-    with col_input:
-        prompt = st.chat_input("Escribe a KingKong...")
-    with col_mic:
-        audio_grabado = st.audio_input("🎙️", key="mic_chat", label_visibility="collapsed")
-
-    # Si se graba audio con el micro
-    if audio_grabado:
-        with st.spinner("Transcribiendo audio..."):
-            texto_voz = transcribir_audio(audio_grabado.getvalue())
-        if texto_voz:
-            st.session_state.messages.append({"role": "user", "content": f"🎙️ {texto_voz}"})
-            with st.chat_message("user", avatar="👤"):
-                st.markdown(f"🎙️ *{texto_voz}*")
-            with st.chat_message("assistant", avatar="🦍"):
-                resp = llamar_a_groq(st.session_state.messages)
-            st.session_state.messages.append({"role": "assistant", "content": resp})
-            st.rerun()
-
-    # Si se escribe texto
-    if prompt:
+    # Barra única integrada estilo Telegram / WhatsApp fija abajo
+    if prompt := st.chat_input("Escribe o pulsa el micro de tu teclado para hablar..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user", avatar="👤"):
             st.markdown(prompt)
@@ -501,30 +488,7 @@ elif menu == "👥 Sala de Conversación":
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    st.markdown("<div style='height: 90px;'></div>", unsafe_allow_html=True)
-
-    # Barra inferior fija integrada: Texto + Micrófono en la sala
-    col_input_s, col_mic_s = st.columns([5, 1])
-    with col_input_s:
-        texto_grupo = st.chat_input("Escribe al grupo (o usa @ia)...")
-    with col_mic_s:
-        audio_sala = st.audio_input("🎙️", key="mic_sala", label_visibility="collapsed")
-
-    # Si se envía audio en la sala
-    if audio_sala:
-        with st.spinner("Transcribiendo voz..."):
-            texto_transcrito = transcribir_audio(audio_sala.getvalue())
-        if texto_transcrito:
-            guardar_mensaje_compartido({
-                "user": st.session_state.user_name,
-                "role": "user",
-                "time": datetime.now().strftime("%H:%M"),
-                "text": f"🎙️ *[Audio]:* {texto_transcrito}"
-            })
-            st.rerun()
-
-    # Si se envía texto en la sala
-    if texto_grupo:
+    if texto_grupo := st.chat_input("Escribe al grupo (o usa @ia)..."):
         hora_envio = datetime.now().strftime("%H:%M")
         
         guardar_mensaje_compartido({
@@ -568,7 +532,7 @@ elif menu == "📁 Archivos":
 
     st.markdown("---")
 
-    st.subheader("⬇️ Archivos y Scripts Disponibles")
+    st.subheader("⬇️️ Archivos y Scripts Disponibles")
     archivos_servidor = sorted(list(UPLOADS_DIR.glob("*")), key=lambda x: x.stat().st_mtime, reverse=True)
 
     if archivos_servidor:
