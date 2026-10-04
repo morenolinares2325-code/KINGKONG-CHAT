@@ -129,7 +129,7 @@ GROQ_KEY = (
 client = Groq(api_key=GROQ_KEY)
 
 # =================================================
-# ESTILOS CSS CON FONDO VISIBLE Y MICRÓFONO INTEGRADO
+# ESTILOS CSS CON FONDO VISIBLE
 # =================================================
 
 bg_css = get_background_css()
@@ -174,9 +174,8 @@ st.markdown(
     .stChatInputContainer {{
         background-color: #0d1a10 !important;
         border: 1.8px solid {st.session_state.theme_color} !important;
-        border-radius: 24px !important;
+        border-radius: 20px !important;
         box-shadow: 0 0 15px rgba(0, 255, 102, 0.35) !important;
-        padding-right: 48px !important;
     }}
 
     [data-testid="stChatInput"] textarea {{
@@ -256,6 +255,14 @@ st.markdown(
         justify-content: center !important;
     }}
 
+    /* Estilo del desplegable de adjuntos */
+    [data-testid="stExpander"] {{
+        background: rgba(13, 26, 16, 0.95) !important;
+        border: 1px solid {st.session_state.theme_color}55 !important;
+        border-radius: 14px !important;
+        margin-bottom: 10px !important;
+    }}
+
     footer {{ visibility: hidden; }}
     </style>
     """,
@@ -282,7 +289,7 @@ with st.sidebar:
 
     menu = st.radio(
         "Navegación",
-        ["💬 KingKong Chat", "👥 Sala de Conversación", "📁 Archivos", "⚙️ Ajustes"],
+        ["💬 KingKong Chat", "👥 Sala de Conversación", "📁 Archivos", "⚙️️ Ajustes"],
         index=0,
         label_visibility="collapsed"
     )
@@ -326,33 +333,26 @@ with st.sidebar:
     )
 
 # =================================================
-# LLAMADAS GROQ CON AUTO-DETECCIÓN DINÁMICA
+# LLAMADAS GROQ (ROBUSTAS CON MODELOS ACTIVOS)
 # =================================================
 
 def obtener_modelo_activo(para_vision=False):
-    """Consulta en directo a la API de Groq para seleccionar un modelo disponible."""
     try:
         modelos_disponibles = [m.id for m in client.models.list().data]
         if para_vision:
-            preferencias_vision = [
-                "qwen/qwen3.8-27b",
-                "llama-3.2-11b-vision-preview",
-                "llama-3.2-90b-vision-preview"
-            ]
-            for p in preferencias_vision:
+            for p in ["qwen/qwen3.8-27b", "llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]:
                 if p in modelos_disponibles:
                     return p
 
-        preferencias = [
+        prioridades = [
             "llama-3.3-70b-versatile",
             "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
             "meta-llama/llama-4-scout-17b-16e-instruct",
             "qwen/qwen3-32b",
             "llama-3.1-8b-instant",
             "gemma2-9b-it"
         ]
-        for p in preferencias:
+        for p in prioridades:
             if p in modelos_disponibles:
                 return p
         for m in modelos_disponibles:
@@ -369,7 +369,7 @@ def llamar_a_groq(historial_mensajes, imagen_b64=None):
             "role": "system",
             "content": (
                 "Eres KingKong IA, un asistente avanzado, conciso y de alto rendimiento. "
-                "Eres analítico, profesional y experto en trading, mercados financieros, tecnología y visión artificial. "
+                "Eres analítico, profesional y experto en trading, mercados financieros y tecnología. "
                 "Responde siempre en español de forma estructurada y precisa."
             )
         }
@@ -383,9 +383,8 @@ def llamar_a_groq(historial_mensajes, imagen_b64=None):
                 txt = txt[:12000] + "\n\n[... Truncado ...]"
             historial.append({"role": m.get("role", "user"), "content": txt})
 
-    # Si se adjunta imagen a la consulta
     if imagen_b64:
-        ultimo_usr = historial[-1]["content"] if historial and historial[-1]["role"] == "user" else "Describe esta imagen"
+        ultimo_usr = historial[-1]["content"] if historial and historial[-1]["role"] == "user" else "Describe esta foto"
         historial[-1] = {
             "role": "user",
             "content": [
@@ -412,94 +411,26 @@ def llamar_a_groq(historial_mensajes, imagen_b64=None):
         st.error(err_msg)
         return err_msg
 
-# =================================================
-# INYECTOR DEL BOTÓN DE MICRÓFONO DENTRO DEL INPUT
-# =================================================
-
-def render_mic_telegram():
-    components.html(
-        f"""
-        <style>
-            #tg-mic {{
-                position: fixed;
-                bottom: 18px;
-                right: 56px;
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                background: {st.session_state.theme_color};
-                border: none;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 17px;
-                box-shadow: 0 0 10px rgba(0, 255, 102, 0.45);
-                z-index: 9999999;
-                transition: transform 0.15s ease, background 0.2s ease;
-            }}
-            #tg-mic:active {{
-                transform: scale(0.9);
-            }}
-            #tg-mic.recording {{
-                background: #ff3333 !important;
-                box-shadow: 0 0 16px rgba(255, 50, 50, 0.8) !important;
-                animation: tg_pulse 1s infinite;
-            }}
-            @keyframes tg_pulse {{
-                0% {{ transform: scale(1); }}
-                50% {{ transform: scale(1.12); }}
-                100% {{ transform: scale(1); }}
-            }}
-        </style>
-        <button id="tg-mic" title="Hablar por voz">🎙️</button>
-        <script>
-            const micBtn = document.getElementById('tg-mic');
-            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRec) {{
-                const rec = new SpeechRec();
-                rec.lang = 'es-ES';
-                rec.continuous = false;
-                rec.interimResults = false;
-                let active = false;
-
-                micBtn.addEventListener('click', () => {{
-                    if (!active) {{
-                        rec.start();
-                    }} else {{
-                        rec.stop();
-                    }}
-                }});
-
-                rec.onstart = () => {{
-                    active = true;
-                    micBtn.classList.add('recording');
-                }};
-                rec.onend = () => {{
-                    active = false;
-                    micBtn.classList.remove('recording');
-                }};
-                rec.onresult = (e) => {{
-                    const phrase = e.results[0][0].transcript;
-                    const doc = window.parent.document;
-                    const area = doc.querySelector('textarea[data-testid="stChatInputTextArea"]');
-                    if (area) {{
-                        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-                        setter.call(area, phrase);
-                        area.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                        area.focus();
-                    }}
-                }};
-            }} else {{
-                micBtn.style.display = 'none';
-            }}
-        </script>
-        """,
-        height=0
-    )
+def transcribir_audio(audio_bytes):
+    try:
+        temp_audio = BASE_DIR / "temp_voice.wav"
+        with open(temp_audio, "wb") as f:
+            f.write(audio_bytes)
+        with open(temp_audio, "rb") as f_aud:
+            transcripcion = client.audio.transcriptions.create(
+                file=("voice.wav", f_aud.read()),
+                model="whisper-large-v3",
+                language="es"
+            )
+        if temp_audio.exists():
+            temp_audio.unlink()
+        return transcripcion.text
+    except Exception as e:
+        st.error(f"Error procesando voz: {e}")
+        return None
 
 # =================================================
-# PESTAÑA 1: 💬 KINGKONG CHAT
+# PESTAÑA 1: 💬 KINGKONG CHAT (IA + DESPLEGABLE)
 # =================================================
 
 if menu == "💬 KingKong Chat":
@@ -522,17 +453,42 @@ if menu == "💬 KingKong Chat":
             if msg.get("content"):
                 st.markdown(msg["content"])
 
-    # Adjuntar Foto o GIF a KingKong
-    with st.expander("📎 Adjuntar Foto o GIF para KingKong", expanded=False):
-        foto_subida = st.file_uploader("Sube una imagen o captura", type=["jpg", "jpeg", "png", "gif", "webp"], key="foto_ia")
+    # Pestañita desplegable tipo Telegram: ▲ Adjuntar (Audio / Foto / Archivo)
+    with st.expander("▲ Adjuntar (Audio 🎙️ / Foto 📷 / Archivo 📁)", expanded=False):
+        col_adj1, col_adj2, col_adj3 = st.columns(3)
 
-    # Inyección del botón de micrófono en la barra
-    render_mic_telegram()
+        with col_adj1:
+            st.markdown("**🎙️ Grabar Audio**")
+            audio_ia = st.audio_input("Habla para la IA", key="aud_ia_in")
+            if audio_ia is not None:
+                with st.spinner("Transcribiendo voz con Whisper..."):
+                    texto_voz = transcribir_audio(audio_ia.getvalue())
+                if texto_voz:
+                    st.session_state.messages.append({"role": "user", "content": f"🎙️ {texto_voz}"})
+                    with st.chat_message("user", avatar="👤"):
+                        st.markdown(f"🎙️ *{texto_voz}*")
+                    with st.chat_message("assistant", avatar="🦍"):
+                        r = llamar_a_groq(st.session_state.messages)
+                    st.session_state.messages.append({"role": "assistant", "content": r})
+                    st.rerun()
 
-    if prompt := st.chat_input("Escribe a KingKong (o pulsa 🎙️ para dictar)..."):
+        with col_adj2:
+            st.markdown("**📷 Subir Foto**")
+            foto_ia = st.file_uploader("Foto para KingKong", type=["jpg", "jpeg", "png"], key="pic_ia")
+
+        with col_adj3:
+            st.markdown("**📁 Subir Archivo**")
+            doc_ia = st.file_uploader("Documento o Script", type=None, key="doc_ia")
+            if doc_ia is not None:
+                dest = UPLOADS_DIR / doc_ia.name
+                with open(dest, "wb") as f:
+                    f.write(doc_ia.getbuffer())
+                st.success(f"Guardado en Archivos: {doc_ia.name}")
+
+    if prompt := st.chat_input("Escribe a KingKong..."):
         img_b64 = None
-        if foto_subida:
-            img_b64 = base64.b64encode(foto_subida.read()).decode()
+        if foto_ia is not None:
+            img_b64 = base64.b64encode(foto_ia.read()).decode()
 
         st.session_state.messages.append({"role": "user", "content": prompt, "image": img_b64})
         with st.chat_message("user", avatar="👤"):
@@ -546,7 +502,7 @@ if menu == "💬 KingKong Chat":
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # =================================================
-# PESTAÑA 2: 👥 SALA DE GRUPO
+# PESTAÑA 2: 👥 SALA DE GRUPO (LIMPIA + DESPLEGABLE)
 # =================================================
 
 elif menu == "👥 Sala de Conversación":
@@ -605,31 +561,45 @@ elif menu == "👥 Sala de Conversación":
             color_autor = st.session_state.theme_color if es_ia else ("#00FF66" if es_propio else "#58a6ff")
             nombre_mostrar = "Tú" if es_propio else msg['user']
             st.markdown(f"<span style='color: {color_autor}; font-weight: bold;'>{nombre_mostrar}</span> <small style='opacity:0.6;'>({msg['time']})</small>", unsafe_allow_html=True)
-            if msg.get("image"):
-                st.image(f"data:image/jpeg;base64,{msg['image']}", width=280)
             if msg.get("text"):
                 st.markdown(msg["text"])
 
-    # Adjuntar Foto o GIF a la Sala
-    with st.expander("📷 Enviar Foto o GIF a la Sala", expanded=False):
-        foto_sala = st.file_uploader("Elige una foto o GIF para el grupo", type=["jpg", "jpeg", "png", "gif", "webp"], key="foto_sala_up")
-        if foto_sala is not None and st.button("📤 Enviar Imagen"):
-            img_b64 = base64.b64encode(foto_sala.read()).decode()
-            guardar_mensaje_compartido({
-                "user": st.session_state.user_name,
-                "role": "user",
-                "time": datetime.now().strftime("%H:%M"),
-                "text": "📷 *[Imagen compartida]*",
-                "image": img_b64
-            })
-            st.rerun()
+    # Pestañita desplegable tipo Telegram: ▲ Adjuntar (Audio 🎙️️ / Archivo 📁)
+    with st.expander("▲ Adjuntar (Audio 🎙️ / Archivo 📁)", expanded=False):
+        col_s1, col_s2 = st.columns(2)
 
-    # Inyección del botón de micrófono en la barra
-    render_mic_telegram()
+        with col_s1:
+            st.markdown("**🎙️ Grabar Nota de Voz**")
+            audio_sala = st.audio_input("Graba tu voz para la sala", key="aud_sala_in")
+            if audio_sala is not None:
+                with st.spinner("Transcribiendo audio..."):
+                    texto_audio = transcribir_audio(audio_sala.getvalue())
+                if texto_audio:
+                    guardar_mensaje_compartido({
+                        "user": st.session_state.user_name,
+                        "role": "user",
+                        "time": datetime.now().strftime("%H:%M"),
+                        "text": f"🎙️ *[Audio]:* {texto_audio}"
+                    })
+                    st.rerun()
 
-    if texto_grupo := st.chat_input("Escribe al grupo (usa @ia o pulsa 🎙️)..."):
+        with col_s2:
+            st.markdown("**📁 Compartir Archivo**")
+            doc_sala = st.file_uploader("Subir documento al grupo", type=None, key="doc_sala_in")
+            if doc_sala is not None and st.button("📤 Enviar Archivo a Sala"):
+                dest = UPLOADS_DIR / doc_sala.name
+                with open(dest, "wb") as f:
+                    f.write(doc_sala.getbuffer())
+                guardar_mensaje_compartido({
+                    "user": st.session_state.user_name,
+                    "role": "user",
+                    "time": datetime.now().strftime("%H:%M"),
+                    "text": f"📁 *[Archivo subido a Descargas]:* **{doc_sala.name}**"
+                })
+                st.rerun()
+
+    if texto_grupo := st.chat_input("Escribe al grupo (usa @ia)..."):
         hora_envio = datetime.now().strftime("%H:%M")
-        
         guardar_mensaje_compartido({
             "user": st.session_state.user_name,
             "role": "user",
@@ -716,7 +686,7 @@ elif menu == "📁 Archivos":
                         st.code(contenido, language="python" if extension in [".py", ".pine", ".mq5"] else None)
                     except Exception as e:
                         st.error(f"Error al leer: {e}")
-                elif extension in [".jpg", ".png", ".jpeg", ".webp", ".gif"]:
+                elif extension in [".jpg", ".png", ".jpeg", ".webp"]:
                     st.image(str(arc), width=380)
                 else:
                     st.info("Vista previa no soportada para este tipo de archivo binario.")
